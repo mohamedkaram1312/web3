@@ -69,9 +69,9 @@ def analyze_stock(ticker, start_date, end_date):
 
     # Build LSTM model
     model = Sequential([
-        LSTM(128, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+        LSTM(360, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
         Dropout(0.2),
-        LSTM(128, return_sequences=False),
+        LSTM(360, return_sequences=False),
         Dropout(0.2),
         Dense(1)
     ])
