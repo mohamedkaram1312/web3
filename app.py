@@ -6,7 +6,6 @@ from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
 import streamlit as st
 
-# Function to compute technical indicators
 def compute_indicators(data):
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['SMA_200'] = data['Close'].rolling(window=200).mean()
@@ -48,7 +47,6 @@ def compute_indicators(data):
 
     return data
 
-# Function to create sequences
 def create_sequences(data, step):
     X, y = [], []
     for i in range(len(data) - step):
@@ -56,7 +54,6 @@ def create_sequences(data, step):
         y.append(data[i + step])
     return np.array(X), np.array(y)
 
-# Function to analyze a single stock
 def analyze_stock(ticker):
     data = yf.download(ticker, start="2022-10-24", end="2024-11-01")
     data = compute_indicators(data)
@@ -103,13 +100,27 @@ def analyze_stock(ticker):
 
     return ticker, predicted_price
 
-# Streamlit app
-st.title('Stock Price Prediction App')
+def main():
+    st.title("Stock Price Prediction")
+    tickers = ['SUGR.CA']
+    results = []
 
-ticker_input = st.text_input('Enter Stock Ticker:', 'SUGR.CA')
-if st.button('Predict Price'):
-    ticker, expected_price = analyze_stock(ticker_input)
-    if expected_price is not None:
-        st.success(f'Expected Price for {ticker}: {expected_price:.2f}')
-    else:
-        st.error(f'Not enough data to predict price for {ticker}.')
+    for ticker in tickers:
+        ticker, predicted_price = analyze_stock(ticker)
+        if predicted_price is not None:
+            results.append((ticker, predicted_price))
+
+    for ticker, predicted_price in results:
+        st.write(f"{ticker}: Predicted Price: {predicted_price:.2f}")
+
+    st.title('Stock Price Prediction App')
+    ticker_input = st.text_input('Enter Stock Ticker:', 'SUGR.CA')
+    if st.button('Predict Price'):
+        ticker, expected_price = analyze_stock(ticker_input)
+        if expected_price is not None:
+            st.success(f'Expected Price for {ticker}: {expected_price:.2f}')
+        else:
+            st.error(f'Not enough data to predict price for {ticker}.')
+
+if __name__ == "__main__":
+    main()
