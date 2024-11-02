@@ -102,10 +102,14 @@ def analyze_stock(ticker, start_date, end_date):
         new_sequence = np.append(last_sequence[0][1:], [[predicted_price_scaled[0][0]] + [0]*10], axis=0)
         last_sequence = new_sequence
 
-    # Calculate the monthly approximation by averaging the 30-day predictions
-    monthly_approximation = np.mean(monthly_predictions)
+    # Calculate max or min prediction based on last close price
+    last_close_price = data['Close'].iloc[-1]
+    if np.mean(monthly_predictions) > last_close_price:
+        prediction_summary = max(monthly_predictions)
+    else:
+        prediction_summary = min(monthly_predictions)
 
-    return data['Close'].iloc[-1].item(), monthly_approximation
+    return last_close_price, prediction_summary
 
 # Streamlit app
 st.title("Stock Price Prediction with Multiple Indicators")
@@ -118,11 +122,14 @@ end_date = st.date_input("Select End Date", datetime(2024, 1, 1))
 if st.button("Predict"):
     if ticker and start_date < end_date:
         with st.spinner(f"Fetching data for {ticker} from {start_date} to {end_date}..."):
-            last_price, monthly_prediction = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+            last_price, prediction_summary = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
             # Display prediction results
             st.write("### Prediction")
             st.write(f"**Last Close Price**: ${last_price:.2f}")
-            st.write(f"**Predicted Price for Next Month** (30-day average): ${monthly_prediction:.2f}")
+            if prediction_summary > last_price:
+                st.write(f"**Maximum Predicted Price for Next Month**: ${prediction_summary:.2f}")
+            else:
+                st.write(f"**Minimum Predicted Price for Next Month**: ${prediction_summary:.2f}")
     else:
         st.error("Please enter a valid ticker and ensure the end date is after the start date.")
