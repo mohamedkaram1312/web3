@@ -51,18 +51,17 @@ def analyze_stock(ticker, start_date, end_date):
     data['RSI_10'] = calculate_rsi(data, 10)
     data['RSI_14'] = calculate_rsi(data, 14)
     data['RSI_20'] = calculate_rsi(data, 20)
-    data['RSI_25'] = calculate_rsi(data, 25)  # Added RSI with a window of 25
-    
+   
     # Calculate Stochastic Oscillator
     data = calculate_stochastic_oscillator(data)  # Added %K and %D calculation
 
     # Drop rows with NaN values (caused by rolling windows)
     data = data.dropna()
 
-    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20, RSI_25, %K, %D)
+    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20,  %K, %D)
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50', 
-                                             'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 'RSI_25', '%K', '%D']])  # Included %K and %D
+                                             'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', '%K', '%D']])  # Included %K and %D
 
     # Create sequences for LSTM model
     X, y = create_sequences(scaled_data, step=10)
