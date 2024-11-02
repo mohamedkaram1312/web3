@@ -54,7 +54,7 @@ def analyze_stock(ticker):
     predicted_price_scaled = model.predict(last_sequence)
     predicted_price = scaler.inverse_transform(predicted_price_scaled)[0][0]
 
-    return data, data['Close'].iloc[-1], predicted_price
+    return data, data['Close'].iloc[-1].item(), predicted_price  # Convert Series to scalar
 
 # Streamlit app
 st.title("Simple Stock Price Prediction")
