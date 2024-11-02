@@ -69,9 +69,9 @@ def analyze_stock(ticker, start_date, end_date):
 
     # Build LSTM model
     model = Sequential([
-        LSTM(360, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+        LSTM(350, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
         Dropout(0.2),
-        LSTM(360, return_sequences=False),
+        LSTM(350, return_sequences=False),
         Dropout(0.2),
         Dense(1)
     ])
@@ -81,7 +81,7 @@ def analyze_stock(ticker, start_date, end_date):
     early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
 
     # Train the model
-    model.fit(X_train, y_train, epochs=50, batch_size=16, validation_split=0.1, callbacks=[early_stopping], verbose=0)
+    model.fit(X_train, y_train, epochs=50, batch_size=32, validation_split=0.1, callbacks=[early_stopping], verbose=0)
 
     # Make prediction for next month
     last_sequence = scaled_data[-60:]  # Last sequence of all features
