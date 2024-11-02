@@ -1,9 +1,6 @@
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, accuracy_score
 import streamlit as st
 
 # Function to compute technical indicators
@@ -35,46 +32,38 @@ def compute_indicators(data):
     
     return data
 
-# Function to predict price direction
+# Function to predict price direction based on indicators
 def predict_price_direction(ticker):
     data = yf.download(ticker, start="2022-01-01", end="2024-11-01")
     data = compute_indicators(data)
 
-    # Define features and target
-    data['Target'] = np.where(data['Close'].shift(-1) > data['Close'], 1, 0)  # 1 if price increases, else 0
-    features = data[['SMA_50', 'SMA_200', 'EMA_50', 'RSI', 'MACD', '%K', '%D']]
-    target = data['Target']
+    # Check indicators for predicting direction
+    last_row = data.iloc[-1]
+    price_increase = False
 
-    # Split the dataset
-    X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
+    # Example logic based on indicators
+    if last_row['SMA_50'] > last_row['SMA_200']:  # Golden Cross
+        price_increase = True
+    elif last_row['RSI'] < 30:  # Oversold
+        price_increase = True
+    elif last_row['MACD'] > 0:  # MACD is positive
+        price_increase = True
+    elif last_row['%K'] > last_row['%D']:  # Stochastic indicates bullish
+        price_increase = True
 
-    # Train a Random Forest Classifier
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
-
-    # Make predictions
-    predictions = model.predict(X_test)
-
-    # Print accuracy and classification report
-    print(f'Accuracy: {accuracy_score(y_test, predictions)}')
-    print(classification_report(y_test, predictions))
-
-    return model, features
+    return price_increase
 
 # Streamlit app setup
-st.title("Stock Price Direction Prediction")
+st.title("Stock Price Direction Prediction Using Indicators")
 
 # User input for the ticker
 ticker = st.text_input("Enter Ticker Symbol:", "AAPL")
 
 if st.button("Predict Direction"):
     with st.spinner("Analyzing..."):
-        model, features = predict_price_direction(ticker)
-        # Get the last data point's indicators for prediction
-        last_indicators = features.iloc[-1].values.reshape(1, -1)
-        direction = model.predict(last_indicators)
+        direction = predict_price_direction(ticker)
 
-        if direction[0] == 1:
+        if direction:
             st.success(f"The predicted direction for {ticker} is an **increase** in price.")
         else:
             st.error(f"The predicted direction for {ticker} is a **decrease** in price.")
