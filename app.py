@@ -7,6 +7,9 @@ from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
 from datetime import datetime
 
+# Global variable to store stock data
+data = None
+
 # Function to calculate RSI
 def calculate_rsi(data, window):
     delta = data['Close'].diff()
@@ -52,8 +55,9 @@ def create_sequences(data, step):
         y.append(data[i + step, 0])  # Target is Close price
     return np.array(X), np.array(y)
 
-# Function to analyze stock and predict next month's price using multiple indicators
-def analyze_stock(ticker, start_date, end_date):
+# Function to analyze stock and compute indicators
+def compute_indicators(ticker, start_date, end_date):
+    global data
     # Load historical data
     data = yf.download(ticker, start=start_date, end=end_date)
     
@@ -78,7 +82,16 @@ def analyze_stock(ticker, start_date, end_date):
     # Drop rows with NaN values (caused by rolling windows)
     data = data.dropna()
 
-    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20, %K, %D, ADX, Momentum, TSI)
+    return data
+
+# Function to predict price using LSTM
+def predict_price():
+    global data
+    if data is None:
+        st.error("Please run the indicators code first.")
+        return None
+    
+    # Prepare data for scaling
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50', 
                                              'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 
@@ -122,14 +135,19 @@ ticker = st.text_input("Enter Stock Ticker (e.g., AAPL):")
 start_date = st.date_input("Select Start Date", datetime(2021, 1, 1))
 end_date = st.date_input("Select End Date", datetime(2024, 1, 1))
 
-if st.button("Predict"):
-    if ticker and start_date < end_date:
-        with st.spinner(f"Fetching data for {ticker} from {start_date} to {end_date}..."):
-            last_price, predicted_price = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-
-            # Display prediction results
-            st.write("### Prediction")
-            st.write(f"**Last Close Price**: ${last_price:.2f}")
-            st.write(f"**Predicted Price for Next Month**: ${predicted_price:.2f}")
+# Button to run indicators
+if st.button("Run Indicators"):
+    if ticker:
+        with st.spinner(f"Calculating indicators for {ticker} from {start_date} to {end_date}..."):
+            compute_indicators(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+            st.success("Indicators calculated successfully!")
     else:
-        st.error("Please enter a valid ticker and ensure the end date is after the start date.")
+        st.error("Please enter a valid ticker.")
+
+# Button to predict price
+if st.button("Predict Price"):
+    last_price, predicted_price = predict_price()
+    if last_price is not None and predicted_price is not None:
+        st.write("### Prediction")
+        st.write(f"**Last Close Price**: ${last_price:.2f}")
+        st.write(f"**Predicted Price for Next Month**: ${predicted_price:.2f}")
