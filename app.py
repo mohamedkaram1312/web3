@@ -46,10 +46,10 @@ if st.button("Run Prediction"):
         data['L14'] = data['Low'].rolling(window=14, min_periods=1).min()
         data['H14'] = data['High'].rolling(window=14, min_periods=1).max()
         
-        # Calculate %K and handle division by zero
+        # Calculate %K and handle potential division by zero
         data['%K'] = np.where(
             (data['H14'] - data['L14']) == 0,
-            50,  # Assign 50 where division is not possible
+            np.nan,  # Assign NaN where division is not possible
             100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
         )
         data['%D'] = data['%K'].rolling(window=3).mean()
