@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -15,13 +15,34 @@ def calculate_rsi(data, window):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# Function to calculate Stochastic Oscillator
+# Function to calculate %K and %D
 def calculate_stochastic_oscillator(data, k_window=14, d_window=3):
     low_min = data['Low'].rolling(window=k_window).min()
     high_max = data['High'].rolling(window=k_window).max()
     data['%K'] = 100 * ((data['Close'] - low_min) / (high_max - low_min))
     data['%D'] = data['%K'].rolling(window=d_window).mean()
     return data
+
+# Function to compute ADX
+def compute_adx(data, window=14):
+    high = data['High']
+    low = data['Low']
+    close = data['Close']
+    tr = np.maximum(high.diff(), close.shift() - low.diff())
+    tr = np.maximum(tr, low.diff())
+    tr = tr.rolling(window=window).sum()
+    return tr
+
+# Function to compute Momentum
+def compute_momentum(data, window=14):
+    return data['Close'].diff(window)
+
+# Function to compute TSI
+def compute_tsi(data, window=14):
+    price_change = data['Close'].diff()
+    ema1 = price_change.ewm(span=window, adjust=False).mean()
+    ema2 = ema1.ewm(span=window, adjust=False).mean()
+    return ema2 / ema1
 
 # Function to create sequences for LSTM
 def create_sequences(data, step):
@@ -47,16 +68,21 @@ def analyze_stock(ticker, start_date, end_date):
     data['RSI_20'] = calculate_rsi(data, 20)
     
     # Calculate Stochastic Oscillator
-    data = calculate_stochastic_oscillator(data)
+    data = calculate_stochastic_oscillator(data)  # Added %K and %D calculation
+    
+    # Calculate ADX, Momentum, and TSI indicators
+    data['ADX'] = compute_adx(data)
+    data['Momentum'] = compute_momentum(data)
+    data['TSI'] = compute_tsi(data)
 
     # Drop rows with NaN values (caused by rolling windows)
     data = data.dropna()
 
-    # Prepare data for scaling
+    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20, %K, %D, ADX, Momentum, TSI)
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50', 
                                              'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 
-                                             '%K', '%D']])
+                                             '%K', '%D', 'ADX', 'Momentum', 'TSI']])  
 
     # Create sequences for LSTM model
     X, y = create_sequences(scaled_data, step=10)
@@ -68,24 +94,23 @@ def analyze_stock(ticker, start_date, end_date):
 
     # Build LSTM model
     model = Sequential([
-        LSTM(128, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),  # Increased LSTM units to 128
+        LSTM(64, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),  
         Dropout(0.2),
-        LSTM(64, return_sequences=False),  # Reduced to 64 units
+        LSTM(50, return_sequences=False),
         Dropout(0.2),
-        Dense(32, activation='relu'),  # Added a Dense layer
-        Dense(1)  # Output layer
+        Dense(1)
     ])
     model.compile(optimizer='adam', loss='mean_squared_error')
 
     # Train the model
-    model.fit(X_train, y_train, epochs=100, batch_size=16, verbose=1)  # Increased epochs to 100 for better training
+    model.fit(X_train, y_train, epochs=50, batch_size=16, verbose=0)  
 
     # Make prediction for next month
     last_sequence = scaled_data[-10:]  # Last sequence of all features
     last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))  
     predicted_price_scaled = model.predict(last_sequence)
     predicted_price = scaler.inverse_transform(
-        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
+        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
 
     return data['Close'].iloc[-1].item(), predicted_price[0][0]
 
