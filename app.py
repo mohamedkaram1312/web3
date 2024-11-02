@@ -2,68 +2,77 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import streamlit as st
+from sklearn.preprocessing import MinMaxScaler
+from keras.models import Sequential
+from keras.layers import LSTM, Dense, Dropout
 
 # Function to compute technical indicators
 def compute_indicators(data):
+    # Moving Averages
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['SMA_200'] = data['Close'].rolling(window=200).mean()
     data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
 
-    # Calculate RSI
-    delta = data['Close'].diff(1)
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
-    data['RSI'] = 100 - (100 / (1 + rs))
+    # RSI for multiple periods
+    for period in [3, 5, 10, 14, 20]:
+        delta = data['Close'].diff(1)
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        data[f'RSI_{period}'] = 100 - (100 / (1 + rs))
 
-    # Calculate MACD
+    # MACD and Signal Line
     data['EMA_12'] = data['Close'].ewm(span=12, adjust=False).mean()
     data['EMA_26'] = data['Close'].ewm(span=26, adjust=False).mean()
     data['MACD'] = data['EMA_12'] - data['EMA_26']
+    data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
 
-    # Calculate Stochastic Oscillator
+    # Stochastic Oscillator
     data['L14'] = data['Low'].rolling(window=14).min()
     data['H14'] = data['High'].rolling(window=14).max()
-    data['%K'] = 100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
-    data['%D'] = data['%K'].rolling(window=3).mean()  # Correctly assign %D based on %K
+    data['%K'] = 100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14'])).fillna(0)  # Ensure fillna
+    data['%D'] = data['%K'].rolling(window=3).mean()
 
-    # Drop NaN values
+    # Bollinger Bands
+    data['BB_Middle'] = data['Close'].rolling(window=20).mean()
+    data['BB_Upper'] = data['BB_Middle'] + (data['Close'].rolling(window=20).std() * 2)
+    data['BB_Lower'] = data['BB_Middle'] - (data['Close'].rolling(window=20).std() * 2)
+
+    # Drop rows with NaN values
     data.dropna(inplace=True)
-    
+
     return data
 
-# Function to predict price direction based on indicators
-def predict_price_direction(ticker):
-    data = yf.download(ticker, start="2022-01-01", end="2024-11-01")
+# Function to analyze stock indicators and predict movement
+def analyze_stock(ticker):
+    data = yf.download(ticker, start="2022-10-24", end="2024-11-01")
     data = compute_indicators(data)
 
-    # Check indicators for predicting direction
-    last_row = data.iloc[-1]
-    price_increase = False
+    if len(data) < 10:
+        return ticker, "Not enough data"
 
-    # Example logic based on indicators
-    if last_row['SMA_50'] > last_row['SMA_200']:  # Golden Cross
-        price_increase = True
-    elif last_row['RSI'] < 30:  # Oversold
-        price_increase = True
-    elif last_row['MACD'] > 0:  # MACD is positive
-        price_increase = True
-    elif last_row['%K'] > last_row['%D']:  # Stochastic indicates bullish
-        price_increase = True
+    # Prepare features based on indicators
+    features = data[['Close', 'SMA_50', 'EMA_50', 'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 
+                     'MACD', 'Signal', '%K', '%D', 'BB_Middle', 'BB_Upper', 'BB_Lower']].iloc[-10:]
 
-    return price_increase
+    # Scale the features
+    scaler = MinMaxScaler()
+    features_scaled = scaler.fit_transform(features)
 
-# Streamlit app setup
-st.title("Stock Price Direction Prediction Using Indicators")
+    # Determine price movement
+    last_price = features_scaled[-1, 0]
+    predicted_movement = 'Increase' if last_price > features_scaled[-2, 0] else 'Decrease'
 
-# User input for the ticker
-ticker = st.text_input("Enter Ticker Symbol:", "AAPL")
+    return ticker, last_price, predicted_movement
 
-if st.button("Predict Direction"):
-    with st.spinner("Analyzing..."):
-        direction = predict_price_direction(ticker)
+# Streamlit UI
+st.title("Stock Price Movement Prediction")
 
-        if direction:
-            st.success(f"The predicted direction for {ticker} is an **increase** in price.")
-        else:
-            st.error(f"The predicted direction for {ticker} is a **decrease** in price.")
+ticker_input = st.text_input("Enter Stock Ticker (e.g., AAPL, MSFT)", "SUGR.CA")
+
+if st.button("Analyze"):
+    ticker, last_price, predicted_movement = analyze_stock(ticker_input)
+    if last_price == "Not enough data":
+        st.error(f"Not enough data for {ticker}.")
+    else:
+        st.success(f"{ticker}: Last Price: {last_price:.2f}, Predicted Movement: {predicted_movement}")
