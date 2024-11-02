@@ -5,19 +5,27 @@ import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import LSTM, Dense
-import talib
 
-# Function to compute technical indicators
+# Function to compute technical indicators without TA-Lib
 def compute_indicators(data):
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
-    data['RSI_3'] = talib.RSI(data['Close'], timeperiod=3)
-    data['RSI_5'] = talib.RSI(data['Close'], timeperiod=5)
-    data['RSI_10'] = talib.RSI(data['Close'], timeperiod=10)
-    data['RSI_14'] = talib.RSI(data['Close'], timeperiod=14)
-    data['RSI_20'] = talib.RSI(data['Close'], timeperiod=20)
+    data['RSI_3'] = compute_rsi(data['Close'], 3)
+    data['RSI_5'] = compute_rsi(data['Close'], 5)
+    data['RSI_10'] = compute_rsi(data['Close'], 10)
+    data['RSI_14'] = compute_rsi(data['Close'], 14)
+    data['RSI_20'] = compute_rsi(data['Close'], 20)
     data.dropna(inplace=True)  # Remove NaN values
     return data
+
+# Function to compute RSI
+def compute_rsi(series, period):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
 
 # Function to create dataset for LSTM
 def create_dataset(data, time_step=1):
