@@ -4,7 +4,6 @@ import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
-import streamlit as st  # Make sure you have Streamlit installed
 
 # Function to compute technical indicators
 def compute_indicators(data):
@@ -49,14 +48,6 @@ def compute_indicators(data):
 
     return data
 
-# Function to create sequences
-def create_sequences(data, step):
-    X, y = [], []
-    for i in range(len(data) - step):
-        X.append(data[i:i + step])
-        y.append(data[i + step])
-    return np.array(X), np.array(y)
-
 # Function to analyze a single stock
 def analyze_stock(ticker, start_date, end_date):
     data = yf.download(ticker, start=start_date, end=end_date)
@@ -67,7 +58,7 @@ def analyze_stock(ticker, start_date, end_date):
 
     # Check if there's enough data
     if len(data) < 10:  # Check if there are at least 10 rows left after dropping NaNs
-        st.error(f"Not enough data for {ticker}.")
+        print(f"Not enough data for {ticker}.")
         return ticker, None, None, None
 
     # Prepare features and target
@@ -117,22 +108,18 @@ def analyze_stock(ticker, start_date, end_date):
     # Calculate expected increase
     percentage_increase = ((predicted_price - last_actual_price) / last_actual_price) * 100
 
-    return ticker, last_actual_price, predicted_price, percentage_increase
+    return ticker, data['Close'].iloc[-1], predicted_price, percentage_increase
 
-# Streamlit app
-st.title("Stock Price Prediction")
-start_date = st.date_input("Select Start Date", pd.to_datetime("2021-10-24"))
-end_date = st.date_input("Select End Date", pd.to_datetime("2024-10-31"))
-
-# List of tickers to analyze
-tickers = st.text_input("Enter stock tickers (comma-separated)", "ALUM.CA").split(",")
+# Sample input for tickers and dates
+tickers = ['ALUM.CA']  # Replace with user input if necessary
+start_date = "2021-10-24"  # Example: Replace with user input
+end_date = "2024-10-31"  # Example: Replace with user input
 
 # Initialize the results list
 results = []
 
 # Analyze each ticker and gather results
 for ticker in tickers:
-    ticker = ticker.strip()  # Clean up the ticker
     ticker, last_price, predicted_price, percentage_increase = analyze_stock(ticker, start_date, end_date)
     if percentage_increase is not None:  # Only append if there is a valid percentage increase
         results.append((ticker, last_price, predicted_price, percentage_increase))
@@ -140,9 +127,6 @@ for ticker in tickers:
 # Sort results by expected increase, filtering out None values
 sorted_results = sorted(results, key=lambda x: x[3], reverse=True)
 
-# Display sorted results
-if sorted_results:
-    for ticker, last_price, predicted_price, percentage_increase in sorted_results:
-        st.write(f"{ticker}: Last Price: {last_price:.2f}, Predicted Price: {predicted_price:.2f}, Expected Increase: {percentage_increase:.2f}%")
-else:
-    st.write("No valid predictions available.")
+# Print sorted results
+for ticker, last_price, predicted_price, percentage_increase in sorted_results:
+    print(f"{ticker}: Last Price: {last_price:.2f}, Predicted Price: {predicted_price:.2f}, Expected Increase: {percentage_increase:.2f}%")
