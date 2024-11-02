@@ -4,6 +4,7 @@ import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
+import streamlit as st
 
 # Function to compute technical indicators
 def compute_indicators(data):
@@ -66,7 +67,6 @@ def analyze_stock(ticker):
 
     # Check if there's enough data
     if len(data) < 10:  # Check if there are at least 10 rows left after dropping NaNs
-        print(f"Not enough data for {ticker}.")
         return ticker, None, None, None
 
     # Prepare features and target
@@ -116,24 +116,16 @@ def analyze_stock(ticker):
     # Calculate expected increase
     percentage_increase = ((predicted_price - last_actual_price) / last_actual_price) * 100
 
-    return ticker, data['Close'].iloc[-1], predicted_price, percentage_increase
+    return ticker, last_actual_price, predicted_price, percentage_increase
 
-# List of tickers to analyze
-#tickers = ['HRHO.CA', 'ISPH.CA','COMI.CA', 'ETEL.CA', 'ESRS.CA', 'ORAS.CA','ABUK.CA', 'CIEB.CA', 'SWDY.CA', 'CCAP.CA', 'JUFO.CA', 'ORWE.CA', 'PHDC.CA', 'MFPC.CA', 'SKPC.CA', 'SUGR.CA', 'EGTS.CA', 'EGCH.CA']  # Add your desired tickers here
-tickers = ['ALUM.CA']  # Add your desired tickers here
+# Streamlit UI
+st.title("Stock Price Prediction with LSTM")
+ticker_input = st.text_input("Enter Stock Ticker (e.g., ALUM.CA)", value="ALUM.CA")
 
-# Initialize the results list
-results = []
-
-# Analyze each ticker and gather results
-for ticker in tickers:
-    ticker, last_price, predicted_price, percentage_increase = analyze_stock(ticker)
-    if percentage_increase is not None:  # Only append if there is a valid percentage increase
-        results.append((ticker, last_price, predicted_price, percentage_increase))
-
-# Sort results by expected increase, filtering out None values
-sorted_results = sorted(results, key=lambda x: x[3], reverse=True)
-
-# Print sorted results
-for ticker, last_price, predicted_price, percentage_increase in sorted_results:
-    print(f"{ticker}: Last Price: {last_price:.2f}, Predicted Price: {predicted_price:.2f}, Expected Increase: {percentage_increase:.2f}%")
+if st.button("Analyze"):
+    with st.spinner("Fetching data and analyzing..."):
+        ticker, last_price, predicted_price, percentage_increase = analyze_stock(ticker_input)
+        if percentage_increase is not None:
+            st.success(f"{ticker}: Last Price: {last_price:.2f}, Predicted Price: {predicted_price:.2f}, Expected Increase: {percentage_increase:.2f}%")
+        else:
+            st.error(f"Not enough data for {ticker}. Please try another ticker.")
