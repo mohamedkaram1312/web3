@@ -1,10 +1,10 @@
-import streamlit as st
 import numpy as np
 import pandas as pd
 import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
+import streamlit as st
 
 def compute_indicators(data):
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
