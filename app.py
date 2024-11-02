@@ -4,6 +4,7 @@ import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
+import streamlit as st
 
 # Function to compute technical indicators
 def compute_indicators(data):
@@ -31,8 +32,11 @@ def create_sequences(data, step):
 # Function to analyze a single stock
 def analyze_stock(ticker):
     data = yf.download(ticker, start="2021-10-24", end="2024-10-31")
-    data = compute_indicators(data)
 
+    if data.empty:
+        return ticker, None, None, None
+
+    data = compute_indicators(data)
     data.dropna(inplace=True)
 
     if len(data) < 10:
@@ -62,8 +66,7 @@ def analyze_stock(ticker):
     model.add(Dense(1))
 
     model.compile(optimizer='adam', loss='mean_squared_error')
-
-    model.fit(X_train, y_train, epochs=50, batch_size=32)
+    model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0)
 
     last_sequence = features_scaled[-10:]
     last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))
@@ -72,13 +75,19 @@ def analyze_stock(ticker):
     predicted_price = scaler_y.inverse_transform(future_price)[0][0]
     last_actual_price = data['Close'].iloc[-1]
 
-    return ticker, last_actual_price, predicted_price, ((predicted_price - last_actual_price) / last_actual_price) * 100
+    percentage_increase = ((predicted_price - last_actual_price) / last_actual_price) * 100
+    return ticker, last_actual_price, predicted_price, percentage_increase
 
-# List of tickers to analyze
-tickers = ['ALUM.CA']  # Add your desired tickers here
+# Streamlit application
+st.title("Stock Price Prediction")
 
-# Analyze each ticker and gather results
-for ticker in tickers:
-    ticker, last_price, predicted_price, percentage_increase = analyze_stock(ticker)
+ticker_input = st.text_input("Enter Stock Ticker Symbol (e.g., ALUM.CA):", "ALUM.CA")
+if st.button("Analyze"):
+    ticker, last_price, predicted_price, percentage_increase = analyze_stock(ticker_input)
+
     if predicted_price is not None:
-        print(f"Expected price for {ticker}: {predicted_price:.2f}")
+        st.write(f"**Last Price:** {last_price:.2f}")
+        st.write(f"**Predicted Price:** {predicted_price:.2f}")
+        st.write(f"**Expected Increase:** {percentage_increase:.2f}%")
+    else:
+        st.write(f"No data available for {ticker_input}.")
