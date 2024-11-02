@@ -40,14 +40,14 @@ def predict_stock_price(ticker, start_date, end_date):
     model.fit(X, y, epochs=50, batch_size=32)
 
     # Predict the next 30 days
-    last_60_days = scaled_data[-60:].reshape(1, -1, 1)
+    last_60_days = scaled_data[-60:].reshape(1, 60, 1)  # Ensure the shape is (1, 60, 1)
     predictions = []
 
     for _ in range(30):
         predicted_price = model.predict(last_60_days)[0][0]
         predictions.append(predicted_price)
-        new_data = np.array([[predicted_price]])
-        last_60_days = np.append(last_60_days[:, 1:, :], new_data.reshape(1, 1, 1), axis=1)
+        # Prepare the input for the next prediction
+        last_60_days = np.append(last_60_days[:, 1:, :], [[predicted_price]], axis=1)
 
     # Inverse transform the predicted prices
     predicted_prices = scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
