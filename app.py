@@ -37,16 +37,16 @@ def analyze_stock(ticker, start_date, end_date):
 
     # Build simple LSTM model
     model = Sequential([
-        LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+        LSTM(64, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
         Dropout(0.2),
-        LSTM(50, return_sequences=False),
+        LSTM(64, return_sequences=False),
         Dropout(0.2),
         Dense(1)
     ])
     model.compile(optimizer='adam', loss='mean_squared_error')
 
     # Train the model
-    model.fit(X_train, y_train, epochs=10, batch_size=16, verbose=0)
+    model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0)
 
     # Make prediction for next month
     last_sequence = scaled_data[-10:]
