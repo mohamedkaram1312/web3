@@ -9,23 +9,23 @@ def compute_indicators(data):
     data['SMA_200'] = data['Close'].rolling(window=200).mean()
     data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
 
-    # RSI
+    # Calculate RSI
     delta = data['Close'].diff(1)
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     data['RSI'] = 100 - (100 / (1 + rs))
 
-    # MACD
+    # Calculate MACD
     data['EMA_12'] = data['Close'].ewm(span=12, adjust=False).mean()
     data['EMA_26'] = data['Close'].ewm(span=26, adjust=False).mean()
     data['MACD'] = data['EMA_12'] - data['EMA_26']
 
-    # Stochastic Oscillator
+    # Calculate Stochastic Oscillator
     data['L14'] = data['Low'].rolling(window=14).min()
     data['H14'] = data['High'].rolling(window=14).max()
     data['%K'] = 100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
-    data['%D'] = data['%K'].rolling(window=3).mean()
+    data['%D'] = data['%K'].rolling(window=3).mean()  # Correctly assign %D based on %K
 
     # Drop NaN values
     data.dropna(inplace=True)
