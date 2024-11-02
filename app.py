@@ -17,14 +17,14 @@ def calculate_rsi(data, window):
 
 # Function to calculate OBV
 def calculate_obv(data):
-    obv = np.zeros(len(data))
+    obv = np.zeros(len(data))  # Initialize OBV array
     for i in range(1, len(data)):
         if data['Close'].iloc[i] > data['Close'].iloc[i - 1]:
             obv[i] = obv[i - 1] + data['Volume'].iloc[i]
         elif data['Close'].iloc[i] < data['Close'].iloc[i - 1]:
             obv[i] = obv[i - 1] - data['Volume'].iloc[i]
         else:
-            obv[i] = obv[i - 1]  # No change
+            obv[i] = obv[i - 1]  # No change in OBV
     return obv
 
 # Function to create sequences for LSTM
