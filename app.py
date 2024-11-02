@@ -4,7 +4,7 @@ import pandas as pd
 import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
-from keras.layers import LSTM, Dense, Dropout, Attention, Input
+from keras.layers import LSTM, Dense, Dropout
 from keras.callbacks import EarlyStopping
 from datetime import datetime
 
@@ -16,7 +16,7 @@ def calculate_rsi(data, window):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# Function to calculate Stochastic Oscillator
+# Function to calculate %K and %D
 def calculate_stochastic_oscillator(data, k_window=14, d_window=3):
     low_min = data['Low'].rolling(window=k_window).min()
     high_max = data['High'].rolling(window=k_window).max()
@@ -32,27 +32,32 @@ def create_sequences(data, step):
         y.append(data[i + step, 0])  # Target is Close price
     return np.array(X), np.array(y)
 
-# Function to analyze stock and predict next month's price
+# Function to analyze stock and predict next month's price using multiple indicators
 def analyze_stock(ticker, start_date, end_date):
     # Load historical data
     data = yf.download(ticker, start=start_date, end=end_date)
     
-    # Calculate indicators
+    # Calculate moving averages and RSI indicators
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['SMA_200'] = data['Close'].rolling(window=200).mean()
     data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
     data['RSI_3'] = calculate_rsi(data, 3)
     data['RSI_5'] = calculate_rsi(data, 5)
+    data['RSI_10'] = calculate_rsi(data, 10)
     data['RSI_14'] = calculate_rsi(data, 14)
+    data['RSI_20'] = calculate_rsi(data, 20)
+
+    # Calculate Stochastic Oscillator
     data = calculate_stochastic_oscillator(data)
-    
+
     # Drop rows with NaN values
     data = data.dropna()
 
-    # Prepare data for scaling
-    features = ['Close', 'SMA_50', 'SMA_200', 'EMA_50', 'RSI_3', 'RSI_5', '%K', '%D']
+    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20, %K, %D)
     scaler = MinMaxScaler()
-    scaled_data = scaler.fit_transform(data[features])
+    scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50', 
+                                             'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 
+                                             '%K', '%D']])
 
     # Create sequences for LSTM model
     X, y = create_sequences(scaled_data, step=60)
@@ -62,33 +67,28 @@ def analyze_stock(ticker, start_date, end_date):
     X_train, X_test = X[:split], X[split:]
     y_train, y_test = y[:split], y[split:]
 
-    # Reshape input to be [samples, time steps, features]
-    X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], len(features)))
-    X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], len(features)))
-
-    # Build LSTM model with attention
-    input_layer = Input(shape=(X_train.shape[1], X_train.shape[2]))
-    x = LSTM(128, return_sequences=True)(input_layer)
-    x = Attention()([x, x])  # Applying attention mechanism
-    x = LSTM(64)(x)
-    x = Dense(1)(x)
-    model = Sequential()
-    model.add(input_layer)
-    model.add(x)
+    # Build LSTM model
+    model = Sequential([
+        LSTM(128, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+        Dropout(0.2),
+        LSTM(128, return_sequences=False),
+        Dropout(0.2),
+        Dense(1)
+    ])
     model.compile(optimizer='adam', loss='mean_squared_error')
 
     # Early stopping to prevent overfitting
     early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
 
     # Train the model
-    model.fit(X_train, y_train, epochs=100, batch_size=32, validation_split=0.1, callbacks=[early_stopping], verbose=0)
+    model.fit(X_train, y_train, epochs=50, batch_size=16, validation_split=0.1, callbacks=[early_stopping], verbose=0)
 
     # Make prediction for next month
     last_sequence = scaled_data[-60:]  # Last sequence of all features
     last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))  
     predicted_price_scaled = model.predict(last_sequence)
     predicted_price = scaler.inverse_transform(
-        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
+        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
 
     return data['Close'].iloc[-1].item(), predicted_price[0][0]
 
