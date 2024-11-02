@@ -1,37 +1,52 @@
 import streamlit as st
 import numpy as np
+import pandas as pd
 import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
 from datetime import datetime
 
-# Function to create sequences
+# Function to calculate RSI
+def calculate_rsi(data, window):
+    delta = data['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+# Function to create sequences for LSTM
 def create_sequences(data, step):
     X, y = [], []
     for i in range(len(data) - step):
         X.append(data[i:i + step])
-        y.append(data[i + step, 0])  # Use only the Close price as target
+        y.append(data[i + step, 0])  # Target is Close price
     return np.array(X), np.array(y)
 
-# Function to analyze stock and predict next month's price using indicators
+# Function to analyze stock and predict next month's price using multiple indicators
 def analyze_stock(ticker, start_date, end_date):
     # Load historical data
     data = yf.download(ticker, start=start_date, end=end_date)
     
-    # Calculate indicators
-    data['SMA_50'] = data['Close'].rolling(window=50).mean()  # 50-day SMA
-    data['SMA_200'] = data['Close'].rolling(window=200).mean()  # 200-day SMA
-    data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()  # 50-day EMA
+    # Calculate moving averages and RSI indicators
+    data['SMA_50'] = data['Close'].rolling(window=50).mean()
+    data['SMA_200'] = data['Close'].rolling(window=200).mean()
+    data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
+    data['RSI_3'] = calculate_rsi(data, 3)
+    data['RSI_5'] = calculate_rsi(data, 5)
+    data['RSI_10'] = calculate_rsi(data, 10)
+    data['RSI_14'] = calculate_rsi(data, 14)
+    data['RSI_20'] = calculate_rsi(data, 20)
 
-    # Drop rows with NaN values (due to rolling window)
+    # Drop rows with NaN values (caused by rolling windows)
     data = data.dropna()
 
-    # Scale data (Close, SMA_50, SMA_200, EMA_50)
+    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20)
     scaler = MinMaxScaler()
-    scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50']])
+    scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50', 
+                                             'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20']])
 
-    # Create sequences for LSTM
+    # Create sequences for LSTM model
     X, y = create_sequences(scaled_data, step=10)
 
     # Train/test split
@@ -54,9 +69,11 @@ def analyze_stock(ticker, start_date, end_date):
 
     # Make prediction for next month
     last_sequence = scaled_data[-10:]  # Last sequence of all features
-    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], 4))  # 4 features in input
+    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))  
     predicted_price_scaled = model.predict(last_sequence)
-    predicted_price = scaler.inverse_transform(np.array([[predicted_price_scaled[0][0], 0, 0, 0]]))[0][0]
+    predicted_price = scaler.inverse_transform(
+        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0]])
+    )[0][0]  # Only the Close price is extracted
 
     return data['Close'].iloc[-1].item(), predicted_price
 
