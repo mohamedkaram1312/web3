@@ -128,7 +128,7 @@ start_date = st.date_input("Select Start Date", datetime(2021, 1, 1))
 end_date = st.date_input("Select End Date", datetime(2024, 1, 1))
 
 if st.button("Predict"):
-    if ticker and start_date < end_date:
+    if ticker and isinstance(start_date, datetime) and isinstance(end_date, datetime) and start_date < end_date:
         with st.spinner(f"Fetching data for {ticker} from {start_date} to {end_date}..."):
             last_price, predicted_price = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
