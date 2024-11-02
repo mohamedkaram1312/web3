@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -15,13 +15,24 @@ def calculate_rsi(data, window):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# Function to calculate MACD and Signal
-def calculate_macd(data):
-    exp1 = data['Close'].ewm(span=12, adjust=False).mean()
-    exp2 = data['Close'].ewm(span=26, adjust=False).mean()
-    macd = exp1 - exp2
-    signal = macd.ewm(span=9, adjust=False).mean()
-    return macd, signal
+# Function to calculate OBV
+def calculate_obv(data):
+    obv = np.zeros(len(data))
+    for i in range(1, len(data)):
+        if data['Close'].iloc[i] > data['Close'].iloc[i - 1]:
+            obv[i] = obv[i - 1] + data['Volume'].iloc[i]
+        elif data['Close'].iloc[i] < data['Close'].iloc[i - 1]:
+            obv[i] = obv[i - 1] - data['Volume'].iloc[i]
+        else:
+            obv[i] = obv[i - 1]
+    return obv
+
+# Function to calculate CMF
+def calculate_cmf(data, window):
+    money_flow_multiplier = ((data['Close'] - data['Low']) - (data['High'] - data['Close'])) / (data['High'] - data['Low'])
+    money_flow_volume = money_flow_multiplier * data['Volume']
+    cmf = money_flow_volume.rolling(window=window).sum() / data['Volume'].rolling(window=window).sum()
+    return cmf
 
 # Function to create sequences for LSTM
 def create_sequences(data, step):
@@ -36,7 +47,7 @@ def analyze_stock(ticker, start_date, end_date):
     # Load historical data
     data = yf.download(ticker, start=start_date, end=end_date)
     
-    # Calculate moving averages, RSI indicators, and MACD
+    # Calculate moving averages, RSI, OBV, and CMF indicators
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['SMA_200'] = data['Close'].rolling(window=200).mean()
     data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
@@ -45,16 +56,17 @@ def analyze_stock(ticker, start_date, end_date):
     data['RSI_10'] = calculate_rsi(data, 10)
     data['RSI_14'] = calculate_rsi(data, 14)
     data['RSI_20'] = calculate_rsi(data, 20)
-    data['MACD'], data['Signal'] = calculate_macd(data)
+    data['OBV'] = calculate_obv(data)
+    data['CMF'] = calculate_cmf(data, window=20)
 
     # Drop rows with NaN values (caused by rolling windows)
     data = data.dropna()
 
-    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20, MACD, Signal)
+    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI, OBV, CMF)
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50', 
                                              'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 
-                                             'MACD', 'Signal']])
+                                             'OBV', 'CMF']])
 
     # Create sequences for LSTM model
     X, y = create_sequences(scaled_data, step=10)
@@ -82,8 +94,7 @@ def analyze_stock(ticker, start_date, end_date):
     last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))  
     predicted_price_scaled = model.predict(last_sequence)
     predicted_price = scaler.inverse_transform(
-        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0]])
-    )[0][0]  # Only the Close price is extracted
+        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))[0][0]  # Only the Close price is extracted
 
     return data['Close'].iloc[-1].item(), predicted_price
 
