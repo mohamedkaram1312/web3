@@ -31,6 +31,10 @@ if st.button("Run Prediction"):
         st.write(data)
 
         def compute_indicators(data):
+            # Ensure that the data has necessary columns
+            if 'Close' not in data.columns or 'High' not in data.columns or 'Low' not in data.columns:
+                raise ValueError("Data does not contain required columns.")
+
             data['SMA_50'] = data['Close'].rolling(window=50).mean()
             data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
             
@@ -81,48 +85,54 @@ if st.button("Run Prediction"):
 
         # Prepare features and target for LSTM
         feature_columns = ['Close', 'SMA_50', 'EMA_50', 'RSI_14', 'MACD', 'Signal', 'OBV', '%K', '%D']
-        features = data[feature_columns].values
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        features_scaled = scaler.fit_transform(features)
+        
+        # Check if feature columns exist in the data
+        missing_columns = [col for col in feature_columns if col not in data.columns]
+        if missing_columns:
+            st.error(f"Missing columns for features: {', '.join(missing_columns)}")
+        else:
+            features = data[feature_columns].values
+            scaler = MinMaxScaler(feature_range=(0, 1))
+            features_scaled = scaler.fit_transform(features)
 
-        # Split data into train and test sets
-        train_size = int(len(features_scaled) * 0.8)
-        train, test = features_scaled[:train_size], features_scaled[train_size:]
+            # Split data into train and test sets
+            train_size = int(len(features_scaled) * 0.8)
+            train, test = features_scaled[:train_size], features_scaled[train_size:]
 
-        # Function to create dataset for LSTM
-        def create_dataset(data, time_step=1):
-            X, y = [], []
-            for i in range(len(data) - time_step - 1):
-                a = data[i:(i + time_step), :]
-                X.append(a)
-                y.append(data[i + time_step, 0])  # Predicting 'Close'
-            return np.array(X), np.array(y)
+            # Function to create dataset for LSTM
+            def create_dataset(data, time_step=1):
+                X, y = [], []
+                for i in range(len(data) - time_step - 1):
+                    a = data[i:(i + time_step), :]
+                    X.append(a)
+                    y.append(data[i + time_step, 0])  # Predicting 'Close'
+                return np.array(X), np.array(y)
 
-        time_step = 30
-        X_train, y_train = create_dataset(train, time_step)
-        X_test, y_test = create_dataset(test, time_step)
+            time_step = 30
+            X_train, y_train = create_dataset(train, time_step)
+            X_test, y_test = create_dataset(test, time_step)
 
-        # Reshape input to be [samples, time steps, features]
-        X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2])
-        X_test = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2])
+            # Reshape input to be [samples, time steps, features]
+            X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2])
+            X_test = X_test.reshape(X_test.shape[0], X_test.shape[1], X_test.shape[2])
 
-        # Build LSTM model
-        model = Sequential()
-        model.add(LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
-        model.add(Dropout(0.2))
-        model.add(LSTM(50, return_sequences=False))
-        model.add(Dropout(0.2))
-        model.add(Dense(1))  # Output layer
+            # Build LSTM model
+            model = Sequential()
+            model.add(LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
+            model.add(Dropout(0.2))
+            model.add(LSTM(50, return_sequences=False))
+            model.add(Dropout(0.2))
+            model.add(Dense(1))  # Output layer
 
-        # Compile and fit the model
-        model.compile(optimizer='adam', loss='mean_squared_error')
-        model.fit(X_train, y_train, epochs=100, batch_size=32, verbose=1)
+            # Compile and fit the model
+            model.compile(optimizer='adam', loss='mean_squared_error')
+            model.fit(X_train, y_train, epochs=100, batch_size=32, verbose=1)
 
-        # Make predictions
-        y_pred = model.predict(X_test)
-        y_pred = scaler.inverse_transform(np.concatenate((y_pred, np.zeros((y_pred.shape[0], features_scaled.shape[1] - 1))), axis=1))[:, 0]
+            # Make predictions
+            y_pred = model.predict(X_test)
+            y_pred = scaler.inverse_transform(np.concatenate((y_pred, np.zeros((y_pred.shape[0], features_scaled.shape[1] - 1))), axis=1))[:, 0]
 
-        # Output predictions
-        st.write("Predicted Prices:")
-        st.write(pd.DataFrame(y_pred, columns=['Predicted Close']))
+            # Output predictions
+            st.write("Predicted Prices:")
+            st.write(pd.DataFrame(y_pred, columns=['Predicted Close']))
 
