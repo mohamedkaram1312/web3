@@ -73,10 +73,15 @@ def predict_stock_price(ticker, start_date, end_date):
         new_data = np.array([[predicted_price] + last_60_days[0, -1, 1:].tolist()])
         last_60_days = np.append(last_60_days[:, 1:, :], new_data.reshape(1, 1, -1), axis=1)
 
-    # Inverse transform the predictions
-    predictions = scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
+    # Reshape predictions for inverse transform
+    predictions_reshaped = np.array(predictions).reshape(-1, 1)
 
-    return predictions
+    # Inverse transform the predicted prices
+    predicted_prices = scaler.inverse_transform(np.concatenate([predictions_reshaped, 
+                                      np.zeros((predictions_reshaped.shape[0], len(feature_columns)-1))], 
+                                      axis=1))[:, 0]  # Only take the first column (Close)
+
+    return predicted_prices
 
 # Streamlit UI
 st.title("Stock Price Predictor with Indicators")
