@@ -11,21 +11,25 @@ def create_sequences(data, step):
     X, y = [], []
     for i in range(len(data) - step):
         X.append(data[i:i + step])
-        y.append(data[i + step])
+        y.append(data[i + step, 0])  # Use only the Close price as target
     return np.array(X), np.array(y)
 
-# Function to analyze stock and predict next month's price
+# Function to analyze stock and predict next month's price using indicators
 def analyze_stock(ticker, start_date, end_date):
     # Load historical data
     data = yf.download(ticker, start=start_date, end=end_date)
-    data['SMA_50'] = data['Close'].rolling(window=50).mean()  # Simple Moving Average (SMA)
+    
+    # Calculate indicators
+    data['SMA_50'] = data['Close'].rolling(window=50).mean()  # 50-day SMA
+    data['SMA_200'] = data['Close'].rolling(window=200).mean()  # 200-day SMA
+    data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()  # 50-day EMA
 
-    # Drop rows with NaN values (to simplify)
+    # Drop rows with NaN values (due to rolling window)
     data = data.dropna()
 
-    # Prepare data for LSTM model
+    # Scale data (Close, SMA_50, SMA_200, EMA_50)
     scaler = MinMaxScaler()
-    scaled_data = scaler.fit_transform(data[['Close']])
+    scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50']])
 
     # Create sequences for LSTM
     X, y = create_sequences(scaled_data, step=10)
@@ -35,29 +39,29 @@ def analyze_stock(ticker, start_date, end_date):
     X_train, X_test = X[:split], X[split:]
     y_train, y_test = y[:split], y[split:]
 
-    # Build simple LSTM model
+    # Build LSTM model
     model = Sequential([
-        LSTM(64, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+        LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
         Dropout(0.2),
-        LSTM(64, return_sequences=False),
+        LSTM(50, return_sequences=False),
         Dropout(0.2),
         Dense(1)
     ])
     model.compile(optimizer='adam', loss='mean_squared_error')
 
     # Train the model
-    model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0)
+    model.fit(X_train, y_train, epochs=10, batch_size=16, verbose=0)
 
     # Make prediction for next month
-    last_sequence = scaled_data[-10:]
-    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], 1))
+    last_sequence = scaled_data[-10:]  # Last sequence of all features
+    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], 4))  # 4 features in input
     predicted_price_scaled = model.predict(last_sequence)
-    predicted_price = scaler.inverse_transform(predicted_price_scaled)[0][0]
+    predicted_price = scaler.inverse_transform(np.array([[predicted_price_scaled[0][0], 0, 0, 0]]))[0][0]
 
-    return data['Close'].iloc[-1].item(), predicted_price  # Convert Series to scalar
+    return data['Close'].iloc[-1].item(), predicted_price
 
 # Streamlit app
-st.title("Stock Price Prediction")
+st.title("Stock Price Prediction with Multiple Indicators")
 
 # User input for ticker and date range
 ticker = st.text_input("Enter Stock Ticker (e.g., AAPL):")
