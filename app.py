@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -28,67 +28,63 @@ def compute_indicators(data):
     data['%K'] = 100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
     data['%D'] = data['%K'].rolling(window=3).mean()
 
-    # Drop rows with NaN values
-    return data.dropna()
+    return data
 
-# Function to create sequences
+# Function to create sequences for LSTM
 def create_sequences(data, step):
     X, y = [], []
     for i in range(len(data) - step):
         X.append(data[i:i + step])
-        y.append(data[i + step])
+        y.append(data[i + step, 0])  # Target is Close price
     return np.array(X), np.array(y)
 
-# Function to analyze stock and predict next month's price
+# Function to analyze stock and predict next month's price using multiple indicators
 def analyze_stock(ticker, start_date, end_date):
     # Load historical data
     data = yf.download(ticker, start=start_date, end=end_date)
-
-    # Compute indicators
+    
+    # Compute technical indicators
     data = compute_indicators(data)
 
-    # Prepare features and target
-    features = data[['Close', 'SMA_50', 'EMA_50', 'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', '%K', '%D']]
-    target = data['Close'].shift(-1)  # Predicting the next closing price
+    # Drop rows with NaN values
+    data = data.dropna()
 
-    # Scale the features and target
-    scaler_x = MinMaxScaler()
-    scaler_y = MinMaxScaler()
+    # Prepare features and target for scaling
+    features = data[['Close', 'SMA_50', 'SMA_200', 'EMA_50', 'RSI_3', 'RSI_5', 
+                     'RSI_10', 'RSI_14', 'RSI_20', '%K', '%D']]
+    
+    scaler = MinMaxScaler()
+    scaled_features = scaler.fit_transform(features)
 
-    features_scaled = scaler_x.fit_transform(features)
-    target_scaled = scaler_y.fit_transform(target[:-1].values.reshape(-1, 1))
+    # Create sequences for LSTM model
+    X, y = create_sequences(scaled_features, step=10)
 
-    # Create sequences
-    X, y = create_sequences(features_scaled, step=10)
-    y = target_scaled[:len(y)]  # Ensure y matches X
-
-    # Split the data into train and test sets
+    # Train/test split
     split = int(len(X) * 0.8)
     X_train, X_test = X[:split], X[split:]
     y_train, y_test = y[:split], y[split:]
 
     # Build LSTM model
-    model = Sequential()
-    model.add(LSTM(64, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
-    model.add(Dropout(0.2))
-    model.add(LSTM(64, return_sequences=False))
-    model.add(Dropout(0.2))
-    model.add(Dense(1))  # Output layer
-
+    model = Sequential([
+        LSTM(64, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+        Dropout(0.2),
+        LSTM(50, return_sequences=False),
+        Dropout(0.2),
+        Dense(1)
+    ])
     model.compile(optimizer='adam', loss='mean_squared_error')
 
     # Train the model
-    model.fit(X_train, y_train, epochs=50, batch_size=32)
+    model.fit(X_train, y_train, epochs=50, batch_size=16, verbose=0)
 
-    # Prepare to predict the next month's price
-    last_sequence = features_scaled[-10:]  # Last 10 data points
-    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))
+    # Make prediction for next month
+    last_sequence = scaled_features[-10:]  # Last sequence of all features
+    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))  
+    predicted_price_scaled = model.predict(last_sequence)
+    predicted_price = scaler.inverse_transform(
+        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
 
-    # Predict future price
-    future_price = model.predict(last_sequence)
-    predicted_price = scaler_y.inverse_transform(future_price)[0][0]
-
-    return data['Close'].iloc[-1], predicted_price
+    return data['Close'].iloc[-1].item(), predicted_price[0][0]
 
 # Streamlit app
 st.title("Stock Price Prediction with Multiple Indicators")
