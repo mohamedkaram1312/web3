@@ -9,39 +9,55 @@ import streamlit as st
 
 # Function to compute technical indicators
 def compute_indicators(data):
-    data['SMA_50'] = data['Close'].rolling(window=50).mean()
-    data['SMA_200'] = data['Close'].rolling(window=200).mean()
-    data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
+    # Only create indicators if the necessary data is present
+    if 'Close' in data.columns:
+        data['SMA_50'] = data['Close'].rolling(window=50).mean()
+        data['SMA_200'] = data['Close'].rolling(window=200).mean()
+        data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
 
     for period in [3, 5, 10, 14, 20]:
-        delta = data['Close'].diff(1)
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss
-        data[f'RSI_{period}'] = 100 - (100 / (1 + rs))
+        if 'Close' in data.columns:
+            delta = data['Close'].diff(1)
+            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+            rs = gain / loss
+            data[f'RSI_{period}'] = 100 - (100 / (1 + rs))
 
-    data['EMA_12'] = data['Close'].ewm(span=12, adjust=False).mean()
-    data['EMA_26'] = data['Close'].ewm(span=26, adjust=False).mean()
-    data['MACD'] = data['EMA_12'] - data['EMA_26']
-    data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
+    if 'Close' in data.columns:
+        data['EMA_12'] = data['Close'].ewm(span=12, adjust=False).mean()
+        data['EMA_26'] = data['Close'].ewm(span=26, adjust=False).mean()
+        data['MACD'] = data['EMA_12'] - data['EMA_26']
+        data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
 
-    data['OBV'] = (np.sign(data['Close'].diff()) * data['Volume']).fillna(0).cumsum()
-    data['CMF'] = (((data['Close'] - data['Low']) - (data['High'] - data['Close'])) /
-                   (data['High'] - data['Low']) * data['Volume']).rolling(window=20).mean()
+    if 'Volume' in data.columns and 'Close' in data.columns:
+        data['OBV'] = (np.sign(data['Close'].diff()) * data['Volume']).fillna(0).cumsum()
+        data['CMF'] = (((data['Close'] - data['Low']) - (data['High'] - data['Close'])) /
+                       (data['High'] - data['Low']) * data['Volume']).rolling(window=20).mean()
 
-    data['L14'] = data['Low'].rolling(window=14).min()
-    data['H14'] = data['High'].rolling(window=14).max()
-    data['%K'] = 100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
-    data['%D'] = data['%K'].rolling(window=3).mean()
+    if 'Low' in data.columns and 'High' in data.columns:
+        data['L14'] = data['Low'].rolling(window=14).min()
+        data['H14'] = data['High'].rolling(window=14).max()
+        data['%K'] = 100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
+        data['%D'] = data['%K'].rolling(window=3).mean()
 
-    data['BB_Middle'] = data['Close'].rolling(window=20).mean()
-    data['BB_Upper'] = data['BB_Middle'] + (data['Close'].rolling(window=20).std() * 2)
-    data['BB_Lower'] = data['BB_Middle'] - (data['Close'].rolling(window=20).std() * 2)
+    if 'Close' in data.columns:
+        data['BB_Middle'] = data['Close'].rolling(window=20).mean()
+        data['BB_Upper'] = data['BB_Middle'] + (data['Close'].rolling(window=20).std() * 2)
+        data['BB_Lower'] = data['BB_Middle'] - (data['Close'].rolling(window=20).std() * 2)
 
-    data['Support'] = data['Low'].rolling(window=20).min()
-    data['Resistance'] = data['High'].rolling(window=20).max()
+    if 'Low' in data.columns and 'High' in data.columns:
+        data['Support'] = data['Low'].rolling(window=20).min()
+        data['Resistance'] = data['High'].rolling(window=20).max()
 
     return data
+
+# Function to create sequences for LSTM
+def create_sequences(data, step):
+    X, y = [], []
+    for i in range(len(data) - step):
+        X.append(data[i:i + step])
+        y.append(data[i + step])
+    return np.array(X), np.array(y)
 
 # Streamlit app
 st.title("Stock Price Prediction")
@@ -56,22 +72,22 @@ if st.button("Predict"):
     data = compute_indicators(data)
     data.dropna(inplace=True)
 
-    features = data[['Close', 'SMA_50', 'EMA_50', 'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20',
-                     'MACD', 'Signal', 'OBV', 'CMF', '%K', '%D', 'BB_Middle', 'BB_Upper',
-                     'BB_Lower', 'Support', 'Resistance']]
+    # Select features dynamically based on available columns
+    feature_columns = ['Close', 'SMA_50', 'EMA_50', 'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20',
+                       'MACD', 'Signal', 'OBV', 'CMF', '%K', '%D', 'BB_Middle', 'BB_Upper',
+                       'BB_Lower', 'Support', 'Resistance']
+    features = data[[col for col in feature_columns if col in data.columns]]
     target = data['Close'].shift(-1)
 
+    # Scale features and target
     scaler_x = MinMaxScaler()
     scaler_y = MinMaxScaler()
 
     features_scaled = scaler_x.fit_transform(features)
     target_scaled = scaler_y.fit_transform(target.values[:-1].reshape(-1, 1))
 
-    X, y = [], []
-    for i in range(len(features_scaled) - 10):
-        X.append(features_scaled[i:i + 10])
-        y.append(target_scaled[i + 10])
-    X, y = np.array(X), np.array(y)
+    step = 10  # Number of previous days to consider for prediction
+    X, y = create_sequences(features_scaled, step)
 
     split = int(len(X) * 0.8)
     X_train, X_test = X[:split], X[split:]
@@ -87,7 +103,7 @@ if st.button("Predict"):
     model.compile(optimizer='adam', loss='mean_squared_error')
     model.fit(X_train, y_train, epochs=50, batch_size=32)
 
-    last_sequence = features_scaled[-10:]
+    last_sequence = features_scaled[-step:]
     last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))
     future_price = model.predict(last_sequence)
     predicted_price = scaler_y.inverse_transform(future_price)[0][0]
