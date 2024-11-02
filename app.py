@@ -1,31 +1,32 @@
+import streamlit as st
 import numpy as np
 import pandas as pd
 import yfinance as yf
-import streamlit as st
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
-from keras.layers import LSTM, Dense, Dropout
+from keras.layers import LSTM, Dropout, Dense
 
 # Function to compute technical indicators
 def compute_indicators(data):
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
-
     for period in [3, 5, 10, 14, 20]:
-        delta = data['Close'].diff(1)
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss
-        data[f'RSI_{period}'] = 100 - (100 / (1 + rs))
-
+        data[f'RSI_{period}'] = compute_rsi(data['Close'], period)
     return data
 
-# Function to create sequences
-def create_sequences(data, step):
+def compute_rsi(series, period):
+    delta = series.diff(1)
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+# Function to create sequences for LSTM
+def create_sequences(data, step=10):
     X, y = [], []
     for i in range(len(data) - step):
         X.append(data[i:i + step])
-        y.append(data[i + step])
+        y.append(data[i + step][0])  # Predicting the next 'Close' price
     return np.array(X), np.array(y)
 
 # Function to predict stock price
@@ -48,10 +49,6 @@ def predict_stock_price(ticker, start_date, end_date):
     X, y = create_sequences(scaled_data, step)
     
     # Check dimensions before reshaping
-    print("Shape of X:", X.shape)
-    print("Shape of y:", y.shape)
-
-    # Ensure we have enough samples
     if X.shape[0] == 0:
         st.error("Not enough data points to create sequences.")
         return None
@@ -82,7 +79,9 @@ def predict_stock_price(ticker, start_date, end_date):
     last_sequence = scaled_data[-step:]  # Last 'step' data points
     last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))
     predicted_price = model.predict(last_sequence)
-    predicted_price = scaler.inverse_transform(predicted_price)
+    
+    # Inverse transform the predicted price
+    predicted_price = scaler.inverse_transform(np.concatenate((predicted_price, np.zeros((predicted_price.shape[0], 7))), axis=1))
 
     return predicted_price[0][0]
 
@@ -91,12 +90,12 @@ st.title("Stock Price Predictor with Indicators")
 
 ticker = st.text_input("Enter stock ticker symbol (e.g., AAPL, MSFT):")
 start_date = st.date_input("Start Date", value=pd.to_datetime("2021-01-01"))
-end_date = st.date_input("End Date", value=pd.to_datetime("2024-01-01"))
+end_date = st.date_input("End Date", value=pd.to_datetime("2024-10-31"))
 
-if st.button("Predict Price"):
-    if ticker and start_date < end_date:
+if st.button("Predict"):
+    if ticker and start_date and end_date:
         predicted_price = predict_stock_price(ticker, start_date, end_date)
         if predicted_price is not None:
-            st.success(f"The predicted next closing price for {ticker} is: ${predicted_price:.2f}")
+            st.success(f"Predicted price for {ticker} on {end_date}: ${predicted_price:.2f}")
     else:
-        st.error("Please enter a valid stock ticker symbol and ensure that the start date is before the end date.")
+        st.error("Please enter a valid stock ticker symbol and ensure the dates are valid.")
