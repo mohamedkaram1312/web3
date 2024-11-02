@@ -15,8 +15,8 @@ def create_sequences(data, step):
     return np.array(X), np.array(y)
 
 # Function to predict stock price
-def predict_stock_price(ticker):
-    data = yf.download(ticker, start="2021-01-01", end="2024-01-01")
+def predict_stock_price(ticker, start_date, end_date):
+    data = yf.download(ticker, start=start_date, end=end_date)
     
     # Prepare the data
     data = data[['Close']]
@@ -62,11 +62,14 @@ def predict_stock_price(ticker):
 
 # Streamlit UI
 st.title("Stock Price Predictor")
+
 ticker = st.text_input("Enter stock ticker symbol (e.g., AAPL, MSFT):")
+start_date = st.date_input("Start Date", value=pd.to_datetime("2021-01-01"))
+end_date = st.date_input("End Date", value=pd.to_datetime("2024-01-01"))
 
 if st.button("Predict Price"):
-    if ticker:
-        predicted_price = predict_stock_price(ticker)
+    if ticker and start_date < end_date:
+        predicted_price = predict_stock_price(ticker, start_date, end_date)
         st.success(f"The predicted next closing price for {ticker} is: ${predicted_price:.2f}")
     else:
-        st.error("Please enter a valid stock ticker symbol.")
+        st.error("Please enter a valid stock ticker symbol and ensure that the start date is before the end date.")
