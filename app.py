@@ -58,7 +58,7 @@ def analyze_stock(ticker, start_date, end_date):
     scaled_data = scaler.fit_transform(data[features])
 
     # Create sequences for LSTM model
-    step = 10  # Change this to match your previous code's sequence length
+    step = 10  # Ensure this matches your previous code
     X, y = create_sequences(scaled_data, step)
 
     # Train/test split
@@ -86,7 +86,7 @@ def analyze_stock(ticker, start_date, end_date):
     
     # Inverse transform to get the predicted price
     predicted_price = scaler.inverse_transform(
-        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
+        np.array([[predicted_price_scaled[0][0]] + [0] * (len(features) - 1)]))  # Only the Close price is extracted
 
     return data['Close'].iloc[-1].item(), predicted_price[0][0]
 
