@@ -23,13 +23,6 @@ def calculate_stochastic_oscillator(data, k_window=14, d_window=3):
     data['%D'] = data['%K'].rolling(window=d_window).mean()
     return data
 
-# Function to calculate Bollinger Bands
-def calculate_bollinger_bands(data, window=20, num_std_dev=2):
-    data['BB_Middle'] = data['Close'].rolling(window=window).mean()
-    data['BB_Upper'] = data['BB_Middle'] + (data['Close'].rolling(window=window).std() * num_std_dev)
-    data['BB_Lower'] = data['BB_Middle'] - (data['Close'].rolling(window=window).std() * num_std_dev)
-    return data
-
 # Function to create sequences for LSTM
 def create_sequences(data, step):
     X, y = [], []
@@ -57,17 +50,14 @@ def analyze_stock(ticker, start_date, end_date):
     # Calculate Stochastic Oscillator
     data = calculate_stochastic_oscillator(data)  # Added %K and %D calculation
 
-    # Calculate Bollinger Bands
-    data = calculate_bollinger_bands(data)  # Added BB_Middle, BB_Upper, and BB_Lower
-
     # Drop rows with NaN values (caused by rolling windows)
     data = data.dropna()
 
-    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20, RSI_25, %K, %D, BB_Middle, BB_Upper, BB_Lower)
+    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20, RSI_25, %K, %D)
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50', 
                                              'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 'RSI_25', 
-                                             '%K', '%D', 'BB_Middle', 'BB_Upper', 'BB_Lower']])  # Included BB indicators
+                                             '%K', '%D']])  # Removed BB indicators
 
     # Create sequences for LSTM model
     X, y = create_sequences(scaled_data, step=10)
@@ -95,7 +85,7 @@ def analyze_stock(ticker, start_date, end_date):
     last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))  
     predicted_price_scaled = model.predict(last_sequence)
     predicted_price = scaler.inverse_transform(
-        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
+        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
 
     return data['Close'].iloc[-1].item(), predicted_price[0][0]
 
