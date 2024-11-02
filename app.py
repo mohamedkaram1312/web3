@@ -105,8 +105,15 @@ for ticker in tickers:
         results.append((ticker, last_price, predicted_price, percentage_increase))
 
 # Sort results by expected increase, filtering out None values
+# Sort results by expected increase, filtering out None values
 sorted_results = sorted(results, key=lambda x: x[3], reverse=True)
 
 # Print sorted results
 for ticker, last_price, predicted_price, percentage_increase in sorted_results:
+    # Ensure that these values are scalar
+    last_price = last_price.item() if isinstance(last_price, pd.Series) else last_price
+    predicted_price = predicted_price.item() if isinstance(predicted_price, pd.Series) else predicted_price
+    percentage_increase = percentage_increase.item() if isinstance(percentage_increase, pd.Series) else percentage_increase
+    
     print(f"{ticker}: Last Price: {last_price:.2f}, Predicted Price: {predicted_price:.2f}, Expected Increase: {percentage_increase:.2f}%")
+
