@@ -8,13 +8,9 @@ from keras.layers import LSTM, Dense, Dropout
 
 # Function to compute technical indicators
 def compute_indicators(data):
-    # Calculate Simple Moving Average (SMA)
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
-    
-    # Calculate Exponential Moving Average (EMA)
     data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
 
-    # Calculate RSI for multiple periods
     for period in [3, 5, 10, 14, 20]:
         delta = data['Close'].diff(1)
         gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -51,18 +47,27 @@ def predict_stock_price(ticker, start_date, end_date):
     step = 10
     X, y = create_sequences(scaled_data, step)
     
+    # Check dimensions before reshaping
+    print("Shape of X:", X.shape)
+    print("Shape of y:", y.shape)
+
+    # Ensure we have enough samples
+    if X.shape[0] == 0:
+        st.error("Not enough data points to create sequences.")
+        return None
+
     # Split the data into train and test sets
     split = int(len(X) * 0.8)
     X_train, X_test = X[:split], X[split:]
     y_train, y_test = y[:split], y[split:]
 
     # Reshape input for LSTM
-    X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
-    X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+    X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], X_train.shape[2]))
+    X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], X_test.shape[2]))
 
     # Build the LSTM model
     model = Sequential()
-    model.add(LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
+    model.add(LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
     model.add(Dropout(0.2))
     model.add(LSTM(50, return_sequences=False))
     model.add(Dropout(0.2))
@@ -74,8 +79,8 @@ def predict_stock_price(ticker, start_date, end_date):
     model.fit(X_train, y_train, epochs=50, batch_size=32)
 
     # Predict the next closing price
-    last_sequence = scaled_data[-step:]  # Last 10 data points
-    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], 1))
+    last_sequence = scaled_data[-step:]  # Last 'step' data points
+    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))
     predicted_price = model.predict(last_sequence)
     predicted_price = scaler.inverse_transform(predicted_price)
 
@@ -91,6 +96,7 @@ end_date = st.date_input("End Date", value=pd.to_datetime("2024-01-01"))
 if st.button("Predict Price"):
     if ticker and start_date < end_date:
         predicted_price = predict_stock_price(ticker, start_date, end_date)
-        st.success(f"The predicted next closing price for {ticker} is: ${predicted_price:.2f}")
+        if predicted_price is not None:
+            st.success(f"The predicted next closing price for {ticker} is: ${predicted_price:.2f}")
     else:
         st.error("Please enter a valid stock ticker symbol and ensure that the start date is before the end date.")
