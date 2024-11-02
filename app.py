@@ -60,7 +60,7 @@ def analyze_stock(ticker, start_date, end_date):
                                              '%K', '%D']])
 
     # Create sequences for LSTM model
-    X, y = create_sequences(scaled_data, step=60)
+    X, y = create_sequences(scaled_data, step=5)
 
     # Train/test split
     split = int(len(X) * 0.8)
@@ -81,7 +81,7 @@ def analyze_stock(ticker, start_date, end_date):
     early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
 
     # Train the model
-    model.fit(X_train, y_train, epochs=50, batch_size=16, validation_split=0.1, callbacks=[early_stopping], verbose=0)
+    model.fit(X_train, y_train, epochs=50, batch_size=32, validation_split=0.1, callbacks=[early_stopping], verbose=0)
 
     # Make a single prediction for the next day
     last_sequence = scaled_data[-60:]  # Last 60 days of all features
