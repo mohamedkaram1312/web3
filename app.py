@@ -1,137 +1,131 @@
+# Import necessary libraries
 import streamlit as st
-import pandas as pd
 import numpy as np
+import pandas as pd
 import yfinance as yf
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from keras.models import Sequential
+from keras.layers import LSTM, Dense, Dropout
 
-# List of EGX30 stocks
-egx30_tickers = [
-    'ABUK.CA', 'COMI.CA', 'CIEB.CA', 'ETEL.CA', 'EFG.CA', 'ESRS.CA', 
-    'HRHO.CA', 'MNHD.CA', 'SWDY.CA', 'TALAAT.CA', 'AUTO.CA', 'CCAP.CA', 
-    'ORAS.CA', 'JUFO.CA', 'ORWE.CA', 'PHDC.CA', 'PACHIN.CA', 'AMER.CA', 
-    'MFPC.CA', 'CLHO.CA', 'ISPH.CA', 'SKPC.CA', 'FWRY.CA', 'DCRC.CA', 
-    'TAMWEEL.CA', 'ALCN.CA', 'SUGR.CA', 'EGTS.CA', 'BINV.CA', 'EGCH.CA'
-]
+# Define technical indicator functions
+def compute_indicators(data):
+    # Moving Averages
+    data['SMA_50'] = data['Close'].rolling(window=50).mean()
+    data['SMA_200'] = data['Close'].rolling(window=200).mean()
+    data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
 
-# Define indicator calculation functions
-def compute_rsi(data, window=14):
-    delta = data.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
+    # RSI for multiple periods
+    for period in [3, 5, 10, 14, 20]:
+        delta = data['Close'].diff(1)
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        data[f'RSI_{period}'] = 100 - (100 / (1 + rs))
 
-def compute_adx(data, window=14):
-    high = data['High']
-    low = data['Low']
-    close = data['Close']
-    tr = np.maximum(high.diff(), close.shift() - low.diff())
-    tr = np.maximum(tr, low.diff())
-    tr = tr.rolling(window=window).sum()
-    return tr
+    # MACD and Signal Line
+    data['EMA_12'] = data['Close'].ewm(span=12, adjust=False).mean()
+    data['EMA_26'] = data['Close'].ewm(span=26, adjust=False).mean()
+    data['MACD'] = data['EMA_12'] - data['EMA_26']
+    data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
 
-def compute_momentum(data, window=14):
-    return data['Close'].diff(window)
+    # Volume-Based Indicators
+    data['OBV'] = (np.sign(data['Close'].diff()) * data['Volume']).fillna(0).cumsum()
+    data['CMF'] = (((data['Close'] - data['Low']) - (data['High'] - data['Close'])) / 
+                   (data['High'] - data['Low']) * data['Volume']).rolling(window=20).mean()
 
-def compute_tsi(data, window=14):
-    price_change = data['Close'].diff()
-    ema1 = price_change.ewm(span=window, adjust=False).mean()
-    ema2 = ema1.ewm(span=window, adjust=False).mean()
-    return ema2 / ema1
+    # Stochastic Oscillator
+    data['L14'] = data['Low'].rolling(window=14).min()
+    data['H14'] = data['High'].rolling(window=14).max()
+    data['%K'] = 100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
+    data['%D'] = data['%K'].rolling(window=3).mean()
 
-def get_recommendation(data):
-    signals = []
-    for index in range(len(data)):
-        rsi = data['RSI'].iloc[index]
-        adx = data['ADX'].iloc[index]
-        momentum = data['Momentum'].iloc[index]
-        tsi = data['TSI'].iloc[index]
-        buy_signals = sum([rsi < 30, adx > 25, momentum > 0, tsi > 0])
-        sell_signals = sum([rsi > 70, momentum < 0, tsi < 0])
-        total_signals = buy_signals + sell_signals
-        
-        if total_signals > 0:
-            if buy_signals / total_signals >= 0.8:
-                signals.append("booming buy")
-            elif buy_signals > sell_signals:
-                signals.append("buy")
-            elif sell_signals > buy_signals:
-                signals.append("sell")
-            else:
-                signals.append("hold")
-        else:
-            signals.append("hold")
-        
-        if rsi < 30:
-            signals[-1] = "oversold"
-        elif rsi > 70:
-            signals[-1] = "overbought"
+    # Bollinger Bands
+    data['BB_Middle'] = data['Close'].rolling(window=20).mean()
+    data['BB_Upper'] = data['BB_Middle'] + (data['Close'].rolling(window=20).std() * 2)
+    data['BB_Lower'] = data['BB_Middle'] - (data['Close'].rolling(window=20).std() * 2)
 
-    return signals
+    # Support and Resistance Levels
+    data['Support'] = data['Low'].rolling(window=20).min()
+    data['Resistance'] = data['High'].rolling(window=20).max()
 
-# Streamlit app
-st.title("Stock Analysis Recommendations")
-st.write("Your smart assistant for stock market insights and recommendations.")
+    return data
 
-# One Stock Status
-st.header("One Stock Status")
-ticker = st.text_input("Ticker (e.g., AAPL)")
-start_date = st.date_input("Start Date")
-end_date = st.date_input("End Date")
-if st.button("Get Recommendation"):
+# Function to create sequences for LSTM
+def create_sequences(data, step):
+    X, y = [], []
+    for i in range(len(data) - step):
+        X.append(data[i:i + step])
+        y.append(data[i + step])
+    return np.array(X), np.array(y)
+
+# Streamlit UI
+st.title("Stock Analysis and Prediction")
+st.write("Enter a stock ticker to analyze its price history and predict the next month's closing price.")
+
+# User inputs
+ticker = st.text_input("Enter Stock Ticker (e.g., 'AAPL', 'GOOGL')", value='AAPL')
+start_date = st.date_input("Start Date", value=pd.to_datetime("2021-01-01"))
+end_date = st.date_input("End Date", value=pd.to_datetime("2024-01-01"))
+
+if st.button("Analyze and Predict"):
     data = yf.download(ticker, start=start_date, end=end_date)
     if data.empty:
         st.error("No data available for the provided ticker.")
     else:
-        data['RSI'] = compute_rsi(data['Close'])
-        data['ADX'] = compute_adx(data)
-        data['Momentum'] = compute_momentum(data)
-        data['TSI'] = compute_tsi(data)
-        recommendations = get_recommendation(data)
-        recommendation = recommendations[-1]
-        st.success(f"Recommendation for {ticker}: {recommendation}")
+        # Compute indicators
+        data = compute_indicators(data)
+        data.dropna(inplace=True)
 
-# Summary Indicators EGX30
-st.header("Summary Indicators EGX30")
-start_date_summary = st.date_input("Start Date (Summary)")
-end_date_summary = st.date_input("End Date (Summary)")
-if st.button("Get EGX30 Summary"):
-    recommendations_summary = {'oversold': [], 'booming buy': [], 'buy': [], 'overbought': []}
-    for ticker in egx30_tickers:
-        data = yf.download(ticker, start=start_date_summary, end=end_date_summary)
-        if data.empty:
-            continue
-        data['RSI'] = compute_rsi(data['Close'])
-        data['ADX'] = compute_adx(data)
-        data['Momentum'] = compute_momentum(data)
-        data['TSI'] = compute_tsi(data)
-        recommendations = get_recommendation(data)
-        last_recommendation = recommendations[-1]
-        if last_recommendation in recommendations_summary:
-            recommendations_summary[last_recommendation].append(ticker)
+        # Prepare features and target for LSTM
+        features = data[['Close', 'SMA_50', 'EMA_50', 'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 
+                         'MACD', 'Signal', 'OBV', 'CMF', '%K', '%D', 'BB_Middle', 'BB_Upper', 
+                         'BB_Lower', 'Support', 'Resistance']]
+        target = data['Close'].shift(-1)
 
-    summary = {key: (value if value else "None") for key, value in recommendations_summary.items()}
-    st.write("Summary of Recommendations:")
-    st.write(summary)
+        # Scale the features and target
+        scaler_x = MinMaxScaler()
+        scaler_y = MinMaxScaler()
+        features_scaled = scaler_x.fit_transform(features)
+        target_scaled = scaler_y.fit_transform(target.values[:-1].reshape(-1, 1))
 
-# Oversold to Buy/Booming
-st.header("Oversold to Buy/Booming")
-start_date_booming = st.date_input("Start Date (Booming)")
-end_date_booming = st.date_input("End Date (Booming)")
-if st.button("Check for Oversold Stocks"):
-    booming_buy_stocks = []
-    for ticker in egx30_tickers:
-        data = yf.download(ticker, start=start_date_booming, end=end_date_booming)
-        if data.empty:
-            continue
-        data['RSI'] = compute_rsi(data['Close'])
-        data['ADX'] = compute_adx(data)
-        data['Momentum'] = compute_momentum(data)
-        data['TSI'] = compute_tsi(data)
-        recommendations = get_recommendation(data)
-        last_recommendation = recommendations[-1]
-        if last_recommendation == "oversold":
-            booming_buy_stocks.append(ticker)
+        # Create sequences
+        X, y = create_sequences(features_scaled, step=10)
+        y = target_scaled[:len(y)]
 
-    st.write("Booming Buy Stocks:")
-    st.write(booming_buy_stocks)
+        # Split data
+        split = int(len(X) * 0.8)
+        X_train, X_test = X[:split], X[split:]
+        y_train, y_test = y[:split], y[split:]
 
+        # Build LSTM model
+        model = Sequential()
+        model.add(LSTM(64, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
+        model.add(Dropout(0.2))
+        model.add(LSTM(64, return_sequences=False))
+        model.add(Dropout(0.2))
+        model.add(Dense(1))
+
+        model.compile(optimizer='adam', loss='mean_squared_error')
+        model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0)
+
+        # Predict next month's price
+        last_sequence = features_scaled[-10:]
+        last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))
+        future_price = model.predict(last_sequence)
+        predicted_price = scaler_y.inverse_transform(future_price)[0][0]
+
+        # Plot results
+        st.subheader("Historical Price and Next Month Prediction")
+        fig, ax = plt.subplots(figsize=(14, 7))
+        ax.plot(data['Close'], label='Historical Prices', color='blue')
+        ax.scatter(data.index[-1] + pd.Timedelta(days=30), predicted_price, color='red', s=100, label='Predicted Price Next Month', zorder=5)
+        ax.set_title(f'Stock Price Prediction for {ticker}')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Price')
+        ax.legend()
+        ax.grid()
+        st.pyplot(fig)
+
+        # Display predicted price
+        st.success(f"Predicted price for the next month: {predicted_price:.2f}")
