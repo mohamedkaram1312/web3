@@ -1,34 +1,40 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
 import yfinance as yf
+import numpy as np
+import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-from keras.models import Sequential
-from keras.layers import LSTM, Dense
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
 
-# Function to compute technical indicators
+# Function to compute indicators
 def compute_indicators(data):
+    # Calculate simple moving average (SMA) and exponential moving average (EMA)
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
+
+    # Calculate RSI
+    delta = data['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    data['RSI_14'] = 100 - (100 / (1 + rs))
     
-    for period in [3, 5, 10, 14, 20]:
-        data[f'RSI_{period}'] = compute_rsi(data['Close'], period)
-    
+    # Adding more RSI indicators
+    for period in [3, 5, 10, 20]:
+        delta = data['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        data[f'RSI_{period}'] = 100 - (100 / (1 + rs))
+
     return data
 
-# Function to calculate RSI
-def compute_rsi(series, period):
-    delta = series.diff(1)
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
-
-# Function to create dataset for LSTM
+# Function to create dataset
 def create_dataset(data, time_step):
     X, y = [], []
-    for i in range(len(data) - time_step):
-        X.append(data[i:(i + time_step), :])
+    for i in range(len(data) - time_step - 1):
+        a = data[i:(i + time_step), :]
+        X.append(a)
         y.append(data[i + time_step, 0])  # We predict the 'Close' price
     return np.array(X), np.array(y)
 
@@ -81,7 +87,10 @@ def predict_stock_price(ticker, start_date, end_date):
                                       np.zeros((predictions_reshaped.shape[0], len(feature_columns)-1))], 
                                       axis=1))[:, 0]  # Only take the first column (Close)
 
-    return predicted_prices
+    # Calculate the average of the predicted prices
+    average_price = np.mean(predicted_prices)
+
+    return predicted_prices, average_price
 
 # Streamlit UI
 st.title("Stock Price Predictor with Indicators")
@@ -92,9 +101,10 @@ end_date = st.date_input("End Date", value=pd.to_datetime("2024-10-31"))
 if st.button("Predict"):
     if ticker:
         try:
-            predictions = predict_stock_price(ticker, start_date, end_date)
+            predictions, average_price = predict_stock_price(ticker, start_date, end_date)
             st.write(f"Predicted Prices for the Next 30 Days for {ticker}:")
             st.line_chart(predictions)
+            st.write(f"The expected average price over the next 30 days is: {average_price:.2f} KZA")
         except Exception as e:
             st.error(f"An error occurred: {e}")
     else:
