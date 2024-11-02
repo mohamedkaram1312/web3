@@ -5,6 +5,7 @@ import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
+from datetime import datetime
 
 # Function to create sequences
 def create_sequences(data, step):
@@ -15,9 +16,9 @@ def create_sequences(data, step):
     return np.array(X), np.array(y)
 
 # Function to analyze stock and predict next month's price
-def analyze_stock(ticker):
+def analyze_stock(ticker, start_date, end_date):
     # Load historical data
-    data = yf.download(ticker, start="2021-01-01", end="2024-01-01")
+    data = yf.download(ticker, start=start_date, end=end_date)
     data['SMA_50'] = data['Close'].rolling(window=50).mean()  # Simple Moving Average (SMA)
 
     # Drop rows with NaN values (to simplify)
@@ -57,13 +58,17 @@ def analyze_stock(ticker):
     return data, data['Close'].iloc[-1].item(), predicted_price  # Convert Series to scalar
 
 # Streamlit app
-st.title("Simple Stock Price Prediction")
+st.title("Stock Price Prediction")
+
+# User input for ticker and date range
 ticker = st.text_input("Enter Stock Ticker (e.g., AAPL):")
+start_date = st.date_input("Select Start Date", datetime(2021, 1, 1))
+end_date = st.date_input("Select End Date", datetime(2024, 1, 1))
 
 if st.button("Predict"):
-    if ticker:
-        with st.spinner(f"Fetching data for {ticker}..."):
-            data, last_price, predicted_price = analyze_stock(ticker)
+    if ticker and start_date < end_date:
+        with st.spinner(f"Fetching data for {ticker} from {start_date} to {end_date}..."):
+            data, last_price, predicted_price = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
             # Display results
             st.write("### Historical Data")
@@ -72,3 +77,5 @@ if st.button("Predict"):
             st.write("### Prediction")
             st.write(f"**Last Close Price**: ${last_price:.2f}")
             st.write(f"**Predicted Price for Next Month**: ${predicted_price:.2f}")
+    else:
+        st.error("Please enter a valid ticker and ensure the end date is after the start date.")
