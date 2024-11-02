@@ -6,6 +6,24 @@ from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
 
+# Function to compute technical indicators
+def compute_indicators(data):
+    # Calculate Simple Moving Average (SMA)
+    data['SMA_50'] = data['Close'].rolling(window=50).mean()
+    
+    # Calculate Exponential Moving Average (EMA)
+    data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
+
+    # Calculate RSI for multiple periods
+    for period in [3, 5, 10, 14, 20]:
+        delta = data['Close'].diff(1)
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        data[f'RSI_{period}'] = 100 - (100 / (1 + rs))
+
+    return data
+
 # Function to create sequences
 def create_sequences(data, step):
     X, y = [], []
@@ -18,13 +36,16 @@ def create_sequences(data, step):
 def predict_stock_price(ticker, start_date, end_date):
     data = yf.download(ticker, start=start_date, end=end_date)
     
-    # Prepare the data
-    data = data[['Close']]
+    # Compute indicators
+    data = compute_indicators(data)
     data = data.dropna()
+
+    # Prepare features and target
+    features = data[['Close', 'SMA_50', 'EMA_50', 'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20']]
     
     # Scale the data
     scaler = MinMaxScaler()
-    scaled_data = scaler.fit_transform(data)
+    scaled_data = scaler.fit_transform(features)
     
     # Create sequences
     step = 10
@@ -61,7 +82,7 @@ def predict_stock_price(ticker, start_date, end_date):
     return predicted_price[0][0]
 
 # Streamlit UI
-st.title("Stock Price Predictor")
+st.title("Stock Price Predictor with Indicators")
 
 ticker = st.text_input("Enter stock ticker symbol (e.g., AAPL, MSFT):")
 start_date = st.date_input("Start Date", value=pd.to_datetime("2021-01-01"))
