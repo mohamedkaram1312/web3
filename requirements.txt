@@ -1,8 +1,8 @@
-streamlit
 numpy
 pandas
 yfinance
 matplotlib
-tensorflow
+tensorflow==2.11.0
+keras==2.11.0
+streamlit
 scikit-learn
-keras
