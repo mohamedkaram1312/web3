@@ -33,8 +33,8 @@ def analyze_stock(ticker, start_date, end_date):
 
     # Train/test split
     split = int(len(X) * 0.8)
-    X_train, X_test = X[:split], X[split:]
-    y_train, y_test = y[:split], y[split:]
+    X_train, X_test = X[:split], y[:split]
+    y_train, y_test = y[:split]
 
     # Build simple LSTM model
     model = Sequential([
@@ -70,10 +70,7 @@ if st.button("Predict"):
         with st.spinner(f"Fetching data for {ticker} from {start_date} to {end_date}..."):
             data, last_price, predicted_price = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
-            # Display results
-            st.write("### Historical Data")
-            st.line_chart(data['Close'])
-
+            # Display prediction results
             st.write("### Prediction")
             st.write(f"**Last Close Price**: ${last_price:.2f}")
             st.write(f"**Predicted Price for Next Month**: ${predicted_price:.2f}")
