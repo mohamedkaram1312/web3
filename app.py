@@ -16,58 +16,66 @@ start_date = st.date_input("Start Date", value=pd.to_datetime("2021-10-24"))
 end_date = st.date_input("End Date", value=pd.to_datetime("2024-10-20"))
 
 if st.button("Run Prediction"):
-
-    def compute_indicators(data):
-        data['SMA_50'] = data['Close'].rolling(window=50).mean()
-        data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
-        
-        # Compute RSI for multiple periods
-        for period in [3, 5, 10, 14, 20]:
-            delta = data['Close'].diff(1)
-            gain = delta.where(delta > 0, 0).rolling(window=period).mean()
-            loss = -delta.where(delta < 0, 0).rolling(window=period).mean()
-            rs = gain / loss
-            data[f'RSI_{period}'] = 100 - (100 / (1 + rs))
-        
-        # Compute MACD
-        data['EMA_12'] = data['Close'].ewm(span=12, adjust=False).mean()
-        data['EMA_26'] = data['Close'].ewm(span=26, adjust=False).mean()
-        data['MACD'] = data['EMA_12'] - data['EMA_26']
-        data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
-        
-        # Compute OBV
-        data['OBV'] = (np.sign(data['Close'].diff()) * data['Volume']).fillna(0).cumsum()
-        
-        # Compute CMF
-        data['CMF'] = (((data['Close'] - data['Low']) - (data['High'] - data['Close'])) /
-                       (data['High'] - data['Low']) * data['Volume']).rolling(window=20).mean()
-
-        # Calculate L14 and H14
-        data['L14'] = data['Low'].rolling(window=14, min_periods=1).min()
-        data['H14'] = data['High'].rolling(window=14, min_periods=1).max()
-        
-        # Calculate %K and handle potential division by zero
-        data['%K'] = np.where(
-            (data['H14'] - data['L14']) == 0,
-            np.nan,  # Assign NaN where division is not possible
-            100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
-        )
-        data['%D'] = data['%K'].rolling(window=3).mean()
-
-        # Bollinger Bands
-        data['BB_Middle'] = data['Close'].rolling(window=20).mean()
-        data['BB_Upper'] = data['BB_Middle'] + (data['Close'].rolling(window=20).std() * 2)
-        data['BB_Lower'] = data['BB_Middle'] - (data['Close'].rolling(window=20).std() * 2)
-        data['Support'] = data['Low'].rolling(window=20).min()
-        data['Resistance'] = data['High'].rolling(window=20).max()
-        
+    @st.cache_data  # Cache data to improve performance
+    def fetch_data(ticker, start_date, end_date):
+        data = yf.download(ticker, start=start_date, end=end_date)
         return data
 
-    # Load data
-    data = yf.download(ticker, start=start_date, end=end_date)
+    data = fetch_data(ticker, start_date, end_date)
+    
     if data.empty:
-        st.error("No data available for the selected ticker and date range.")
+        st.error("No data available for the selected ticker and date range. Please check the ticker symbol and date range.")
     else:
+        # Display data for debugging
+        st.write("Data Retrieved:")
+        st.write(data)
+
+        def compute_indicators(data):
+            data['SMA_50'] = data['Close'].rolling(window=50).mean()
+            data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
+            
+            # Compute RSI for multiple periods
+            for period in [3, 5, 10, 14, 20]:
+                delta = data['Close'].diff(1)
+                gain = delta.where(delta > 0, 0).rolling(window=period).mean()
+                loss = -delta.where(delta < 0, 0).rolling(window=period).mean()
+                rs = gain / loss
+                data[f'RSI_{period}'] = 100 - (100 / (1 + rs))
+            
+            # Compute MACD
+            data['EMA_12'] = data['Close'].ewm(span=12, adjust=False).mean()
+            data['EMA_26'] = data['Close'].ewm(span=26, adjust=False).mean()
+            data['MACD'] = data['EMA_12'] - data['EMA_26']
+            data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
+            
+            # Compute OBV
+            data['OBV'] = (np.sign(data['Close'].diff()) * data['Volume']).fillna(0).cumsum()
+            
+            # Compute CMF
+            data['CMF'] = (((data['Close'] - data['Low']) - (data['High'] - data['Close'])) /
+                           (data['High'] - data['Low']) * data['Volume']).rolling(window=20).mean()
+
+            # Calculate L14 and H14
+            data['L14'] = data['Low'].rolling(window=14, min_periods=1).min()
+            data['H14'] = data['High'].rolling(window=14, min_periods=1).max()
+            
+            # Calculate %K and handle potential division by zero
+            data['%K'] = np.where(
+                (data['H14'] - data['L14']) == 0,
+                np.nan,  # Assign NaN where division is not possible
+                100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
+            )
+            data['%D'] = data['%K'].rolling(window=3).mean()
+
+            # Bollinger Bands
+            data['BB_Middle'] = data['Close'].rolling(window=20).mean()
+            data['BB_Upper'] = data['BB_Middle'] + (data['Close'].rolling(window=20).std() * 2)
+            data['BB_Lower'] = data['BB_Middle'] - (data['Close'].rolling(window=20).std() * 2)
+            data['Support'] = data['Low'].rolling(window=20).min()
+            data['Resistance'] = data['High'].rolling(window=20).max()
+            
+            return data
+
         data = compute_indicators(data)
         data.dropna(inplace=True)  # Remove any remaining NaN rows
 
@@ -117,3 +125,4 @@ if st.button("Run Prediction"):
         # Output predictions
         st.write("Predicted Prices:")
         st.write(pd.DataFrame(y_pred, columns=['Predicted Close']))
+
