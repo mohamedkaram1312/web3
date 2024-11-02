@@ -82,7 +82,9 @@ def analyze_stock(ticker):
 
     # Predict future price
     future_price = model.predict(last_sequence)
-    predicted_price = scaler_y.inverse_transform(future_price)[0][0]
+
+    # Fix for extracting predicted_price
+    predicted_price = scaler_y.inverse_transform(future_price.reshape(-1, 1))[0][0]
     last_actual_price = data['Close'].iloc[-1]
 
     # Calculate expected increase
