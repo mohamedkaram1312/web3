@@ -83,14 +83,29 @@ def analyze_stock(ticker, start_date, end_date):
     # Train the model
     model.fit(X_train, y_train, epochs=50, batch_size=16, validation_split=0.1, callbacks=[early_stopping], verbose=0)
 
-    # Make prediction for next month
+    # Make predictions for the next 30 days iteratively
     last_sequence = scaled_data[-60:]  # Last sequence of all features
-    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))  
-    predicted_price_scaled = model.predict(last_sequence)
-    predicted_price = scaler.inverse_transform(
-        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
+    monthly_predictions = []
+    for _ in range(30):
+        last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))
+        predicted_price_scaled = model.predict(last_sequence)
+        
+        # Invert scaling to get the predicted price in original units
+        predicted_price = scaler.inverse_transform(
+            np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
+        )[0][0]
+        
+        # Append to monthly predictions list
+        monthly_predictions.append(predicted_price)
+        
+        # Update the last_sequence with the new prediction to predict the next day
+        new_sequence = np.append(last_sequence[0][1:], [[predicted_price_scaled[0][0]] + [0]*10], axis=0)
+        last_sequence = new_sequence
 
-    return data['Close'].iloc[-1].item(), predicted_price[0][0]
+    # Calculate the monthly approximation by averaging the 30-day predictions
+    monthly_approximation = np.mean(monthly_predictions)
+
+    return data['Close'].iloc[-1].item(), monthly_approximation
 
 # Streamlit app
 st.title("Stock Price Prediction with Multiple Indicators")
@@ -103,11 +118,11 @@ end_date = st.date_input("Select End Date", datetime(2024, 1, 1))
 if st.button("Predict"):
     if ticker and start_date < end_date:
         with st.spinner(f"Fetching data for {ticker} from {start_date} to {end_date}..."):
-            last_price, predicted_price = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+            last_price, monthly_prediction = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
             # Display prediction results
             st.write("### Prediction")
             st.write(f"**Last Close Price**: ${last_price:.2f}")
-            st.write(f"**Predicted Price for Next Month**: ${predicted_price:.2f}")
+            st.write(f"**Predicted Price for Next Month** (30-day average): ${monthly_prediction:.2f}")
     else:
         st.error("Please enter a valid ticker and ensure the end date is after the start date.")
