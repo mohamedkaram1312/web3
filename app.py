@@ -37,6 +37,10 @@ def analyze_stock(ticker, start_date, end_date):
     X_train, X_test = X[:split], X[split:]
     y_train, y_test = y[:split], y[split:]
 
+    # Reshape X for LSTM [samples, time_steps, features]
+    X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
+    X_test = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
+
     # Build LSTM model
     model = Sequential()
     model.add(LSTM(64, return_sequences=True, input_shape=(X_train.shape[1], 1)))
@@ -51,8 +55,8 @@ def analyze_stock(ticker, start_date, end_date):
     # Predict future price for the next 30 days
     future_prices = []
     last_sequence = data_scaled[-10:]  # Last 10 days for prediction
+    last_sequence = last_sequence.reshape((1, last_sequence.shape[0], 1))  # Reshape for LSTM input
     for _ in range(30):
-        last_sequence = last_sequence.reshape((1, last_sequence.shape[0], last_sequence.shape[1]))
         future_price = model.predict(last_sequence)
         future_prices.append(future_price[0, 0])
         last_sequence = np.append(last_sequence[:, 1:, :], [[future_price]], axis=1)  # Append the new prediction
