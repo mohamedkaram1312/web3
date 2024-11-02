@@ -15,7 +15,7 @@ def calculate_rsi(data, window):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# Function to calculate %K and %D
+# Function to calculate %K and %D for Stochastic Oscillator
 def calculate_stochastic_oscillator(data, k_window=14, d_window=3):
     low_min = data['Low'].rolling(window=k_window).min()
     high_max = data['High'].rolling(window=k_window).max()
@@ -28,15 +28,15 @@ def create_sequences(data, step):
     X, y = [], []
     for i in range(len(data) - step):
         X.append(data[i:i + step])
-        y.append(data[i + step, 0])  # Target is Close price
+        y.append(data[i + step, 0])  # Target is the Close price
     return np.array(X), np.array(y)
 
-# Function to analyze stock and predict next month's price using multiple indicators
+# Function to analyze stock and predict next month's price
 def analyze_stock(ticker, start_date, end_date):
     # Load historical data
     data = yf.download(ticker, start=start_date, end=end_date)
-    
-    # Calculate moving averages and RSI indicators
+
+    # Calculate indicators
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['SMA_200'] = data['Close'].rolling(window=200).mean()
     data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
@@ -45,18 +45,17 @@ def analyze_stock(ticker, start_date, end_date):
     data['RSI_10'] = calculate_rsi(data, 10)
     data['RSI_14'] = calculate_rsi(data, 14)
     data['RSI_20'] = calculate_rsi(data, 20)
-    
-    # Calculate Stochastic Oscillator
     data = calculate_stochastic_oscillator(data)
 
-    # Drop rows with NaN values (caused by rolling windows)
+    # Drop rows with NaN values
     data = data.dropna()
 
-    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20, %K, %D)
+    # Prepare data for scaling
+    features = ['Close', 'SMA_50', 'SMA_200', 'EMA_50', 
+                'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 
+                '%K', '%D']
     scaler = MinMaxScaler()
-    scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50', 
-                                             'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 
-                                             '%K', '%D']])
+    scaled_data = scaler.fit_transform(data[features])
 
     # Create sequences for LSTM model
     X, y = create_sequences(scaled_data, step=10)
@@ -68,25 +67,26 @@ def analyze_stock(ticker, start_date, end_date):
 
     # Build LSTM model
     model = Sequential([
-        LSTM(64, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),  # LSTM units set to 64
+        LSTM(64, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
         Dropout(0.2),
-        LSTM(64, return_sequences=False),  # Consistent LSTM units
+        LSTM(64, return_sequences=False),
         Dropout(0.2),
         Dense(1)
     ])
     model.compile(optimizer='adam', loss='mean_squared_error')
 
     # Train the model
-    model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0)  # Batch size set to 32
+    model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0)
 
     # Make prediction for next month
-    last_sequence = scaled_data[-10:]  # Last sequence of all features
-    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))  
+    last_sequence = scaled_data[-10:]  # Last sequence of features
+    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))
     predicted_price_scaled = model.predict(last_sequence)
     predicted_price = scaler.inverse_transform(
-        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Extracting only the Close price
+        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
+    )[0][0]  # Extracting only the Close price
 
-    return data['Close'].iloc[-1].item(), predicted_price[0][0]
+    return data['Close'].iloc[-1].item(), predicted_price
 
 # Streamlit app
 st.title("Stock Price Prediction with Multiple Indicators")
