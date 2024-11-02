@@ -8,10 +8,12 @@ import streamlit as st
 
 # Function to compute technical indicators
 def compute_indicators(data):
+    # Moving Averages
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['SMA_200'] = data['Close'].rolling(window=200).mean()
     data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
 
+    # RSI for multiple periods
     for period in [3, 5, 10, 14, 20]:
         delta = data['Close'].diff(1)
         gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -34,13 +36,13 @@ def analyze_stock(ticker):
     data = yf.download(ticker, start="2021-10-24", end="2024-10-31")
 
     if data.empty:
-        return ticker, None, None, None
+        return ticker, None, None
 
     data = compute_indicators(data)
     data.dropna(inplace=True)
 
     if len(data) < 10:
-        return ticker, None, None, None
+        return ticker, None, None
 
     features = data[['Close', 'SMA_50', 'EMA_50', 'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20']]
     target = data['Close'].shift(-1)
@@ -75,19 +77,17 @@ def analyze_stock(ticker):
     predicted_price = scaler_y.inverse_transform(future_price)[0][0]
     last_actual_price = data['Close'].iloc[-1]
 
-    percentage_increase = ((predicted_price - last_actual_price) / last_actual_price) * 100
-    return ticker, last_actual_price, predicted_price, percentage_increase
+    return ticker, last_actual_price, predicted_price
 
 # Streamlit application
 st.title("Stock Price Prediction")
 
 ticker_input = st.text_input("Enter Stock Ticker Symbol (e.g., ALUM.CA):", "ALUM.CA")
 if st.button("Analyze"):
-    ticker, last_price, predicted_price, percentage_increase = analyze_stock(ticker_input)
+    ticker, last_price, predicted_price = analyze_stock(ticker_input)
 
     if predicted_price is not None:
         st.write(f"**Last Price:** {last_price:.2f}")
-        st.write(f"**Predicted Price:** {predicted_price:.2f}")
-        st.write(f"**Expected Increase:** {percentage_increase:.2f}%")
+        st.write(f"**Expected Price:** {predicted_price:.2f}")
     else:
         st.write(f"No data available for {ticker_input}.")
