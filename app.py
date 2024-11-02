@@ -17,10 +17,16 @@ def calculate_rsi(data, window):
 
 # Function to calculate %K and %D
 def calculate_stochastic_oscillator(data, k_window=14, d_window=3):
+    # Calculate the lowest low and highest high
     low_min = data['Low'].rolling(window=k_window).min()
     high_max = data['High'].rolling(window=k_window).max()
+    
+    # Calculate %K
     data['%K'] = 100 * ((data['Close'] - low_min) / (high_max - low_min))
+    
+    # Calculate %D (simple moving average of %K)
     data['%D'] = data['%K'].rolling(window=d_window).mean()
+    
     return data
 
 # Function to create sequences for LSTM
@@ -56,8 +62,7 @@ def analyze_stock(ticker, start_date, end_date):
     # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20, RSI_25, %K, %D)
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50', 
-                                             'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 'RSI_25', 
-                                             '%K', '%D']])  # Removed BB indicators
+                                             'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 'RSI_25', '%K', '%D']])  # Included %K and %D
 
     # Create sequences for LSTM model
     X, y = create_sequences(scaled_data, step=10)
@@ -85,7 +90,7 @@ def analyze_stock(ticker, start_date, end_date):
     last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))  
     predicted_price_scaled = model.predict(last_sequence)
     predicted_price = scaler.inverse_transform(
-        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
+        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
 
     return data['Close'].iloc[-1].item(), predicted_price[0][0]
 
