@@ -1,143 +1,90 @@
-import streamlit as st
 import numpy as np
 import pandas as pd
 import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
+from keras.models import Sequential
+from keras.layers import LSTM, Dense, Dropout
+from keras.callbacks import EarlyStopping
+import streamlit as st
 
-# Function to calculate RSI
-def calculate_rsi(data, window):
-    delta = data['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
+# Function to create sequences
+def create_sequences(data, step):
+    X, y = [], []
+    for i in range(len(data) - step):
+        X.append(data[i:i + step])
+        y.append(data[i + step])
+    return np.array(X), np.array(y)
 
-# Function to calculate MACD
-def calculate_macd(data, short_window=12, long_window=26, signal_window=9):
-    data['EMA_short'] = data['Close'].ewm(span=short_window, adjust=False).mean()
-    data['EMA_long'] = data['Close'].ewm(span=long_window, adjust=False).mean()
-    data['MACD'] = data['EMA_short'] - data['EMA_long']
-    data['Signal'] = data['MACD'].ewm(span=signal_window, adjust=False).mean()
-    return data
-
-# Function to calculate Bollinger Bands
-def calculate_bollinger_bands(data, window=20):
-    data['BB_Middle'] = data['Close'].rolling(window=window).mean()
-    data['BB_Upper'] = data['BB_Middle'] + (data['Close'].rolling(window=window).std() * 2)
-    data['BB_Lower'] = data['BB_Middle'] - (data['Close'].rolling(window=window).std() * 2)
-    return data
-
-# Function to calculate OBV
-def calculate_obv(data):
-    data['Volume'] = data['Volume'].astype(float)
-    obv = [0]  # Initial OBV
-    for i in range(1, len(data)):
-        if data['Close'].iloc[i] > data['Close'].iloc[i - 1]:
-            obv.append(obv[-1] + data['Volume'].iloc[i])
-        elif data['Close'].iloc[i] < data['Close'].iloc[i - 1]:
-            obv.append(obv[-1] - data['Volume'].iloc[i])
-        else:
-            obv.append(obv[-1])
-    data['OBV'] = obv
-    return data
-
-# Function to calculate Support and Resistance levels
-def calculate_support_resistance(data):
-    data['Support'] = data['Close'].rolling(window=20).min()
-    data['Resistance'] = data['Close'].rolling(window=20).max()
-    return data
-
-# Function to calculate Chaikin Money Flow (CMF)
-def calculate_cmf(data, window=20):
-    data['Money Flow Volume'] = (data['Close'] - data['Low'] - (data['High'] - data['Close'])) / (data['High'] - data['Low']) * data['Volume']
-    data['CMF'] = data['Money Flow Volume'].rolling(window=window).sum() / data['Volume'].rolling(window=window).sum()
-    return data
-
-# Function to analyze stock and predict price movement
+# Function to analyze a single stock
 def analyze_stock(ticker, start_date, end_date):
-    # Load historical data
     data = yf.download(ticker, start=start_date, end=end_date)
+    # Drop rows with NaN values
+    data.dropna(inplace=True)
 
-    # Calculate indicators
-    data['SMA_50'] = data['Close'].rolling(window=50).mean()
-    data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
-    data['RSI_3'] = calculate_rsi(data, 3)
-    data['RSI_5'] = calculate_rsi(data, 5)
-    data['RSI_10'] = calculate_rsi(data, 10)
-    data['RSI_14'] = calculate_rsi(data, 14)
-    data['RSI_20'] = calculate_rsi(data, 20)
-    
-    # Calculate MACD
-    data = calculate_macd(data)
+    # Check if there's enough data
+    if len(data) < 10:  # Check if there are at least 10 rows left after dropping NaNs
+        st.error(f"Not enough data for {ticker}.")
+        return ticker, None, None, None
 
-    # Calculate Bollinger Bands
-    data = calculate_bollinger_bands(data)
+    # Prepare features and target
+    features = data[['Close']]  # Using only the 'Close' price
+    target = data['Close'].shift(-1)  # Predicting the next closing price
 
-    # Calculate OBV
-    data = calculate_obv(data)
+    # Scale the features and target
+    scaler_x = MinMaxScaler()
+    scaler_y = MinMaxScaler()
 
-    # Calculate Support and Resistance
-    data = calculate_support_resistance(data)
+    features_scaled = scaler_x.fit_transform(features)
+    target_scaled = scaler_y.fit_transform(target.values[:-1].reshape(-1, 1))
 
-    # Calculate CMF
-    data = calculate_cmf(data)
+    # Create sequences
+    X, y = create_sequences(features_scaled, step=60)
+    y = target_scaled[:len(y)]  # Ensure y matches X
 
-    # Drop rows with NaN values (caused by rolling windows)
-    data = data.dropna()
+    # Split the data into train and test sets
+    split = int(len(X) * 0.8)
+    X_train, X_test = X[:split], X[split:]
+    y_train, y_test = y[:split], y[split:]
 
-    # Analyze the indicators to predict future price movement
-    last_row = data.iloc[-1]
-    indicators = {
-        'SMA_50': last_row['SMA_50'],
-        'EMA_50': last_row['EMA_50'],
-        'RSI_3': last_row['RSI_3'],
-        'RSI_5': last_row['RSI_5'],
-        'RSI_10': last_row['RSI_10'],
-        'RSI_14': last_row['RSI_14'],
-        'RSI_20': last_row['RSI_20'],
-        'MACD': last_row['MACD'],
-        'Signal': last_row['Signal'],
-        'OBV': last_row['OBV'],
-        'CMF': last_row['CMF'],
-        '%K': last_row['%K'] if '%K' in data.columns else None,
-        '%D': last_row['%D'] if '%D' in data.columns else None,
-        'BB_Middle': last_row['BB_Middle'],
-        'BB_Upper': last_row['BB_Upper'],
-        'BB_Lower': last_row['BB_Lower'],
-        'Support': last_row['Support'],
-        'Resistance': last_row['Resistance']
-    }
+    # Build LSTM model
+    model = Sequential()
+    model.add(LSTM(350, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])))
+    model.add(Dropout(0.2))
+    model.add(LSTM(350, return_sequences=False))
+    model.add(Dropout(0.2))
+    model.add(Dense(1))  # Output layer
 
-    # Logic to predict increase or decrease
-    prediction = ""
-    if (indicators['RSI_14'] < 30) and (indicators['Close'] < indicators['Support']):
-        prediction = "The stock is likely to increase (oversold condition)."
-    elif (indicators['RSI_14'] > 70) and (indicators['Close'] > indicators['Resistance']):
-        prediction = "The stock is likely to decrease (overbought condition)."
-    else:
-        prediction = "The stock movement is uncertain."
+    model.compile(optimizer='adam', loss='mean_squared_error')
 
-    return indicators, prediction
+    # Early stopping
+    early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+    # Train the model
+    model.fit(X_train, y_train, epochs=50, batch_size=32, validation_split=0.1, callbacks=[early_stopping])
+
+    # Prepare to predict the next month's price
+    last_sequence = features_scaled[-60:]  # Last 60 data points
+    last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))
+
+    # Predict future price
+    future_price = model.predict(last_sequence)
+    predicted_price = scaler_y.inverse_transform(future_price)[0][0]
+    last_actual_price = data['Close'].iloc[-1]
+
+    # Calculate expected increase
+    percentage_increase = ((predicted_price - last_actual_price) / last_actual_price) * 100
+
+    return ticker, last_actual_price, predicted_price, percentage_increase
 
 # Streamlit app
-st.title("Stock Movement Prediction")
+st.title('Stock Price Prediction with LSTM')
+ticker_input = st.text_input("Enter Stock Ticker (e.g., CCAP.CA):", "CCAP.CA")
+start_date = st.date_input("Select Start Date", pd.to_datetime("2022-01-01"))
+end_date = st.date_input("Select End Date", pd.to_datetime("2023-10-23"))
 
-# User input for ticker and date range
-ticker = st.text_input("Enter Stock Ticker (e.g., AAPL):")
-start_date = st.date_input("Select Start Date", pd.to_datetime("2021-01-01"))
-end_date = st.date_input("Select End Date", pd.to_datetime("2024-01-01"))
-
-if st.button("Predict"):
-    if ticker and isinstance(start_date, pd.Timestamp) and isinstance(end_date, pd.Timestamp) and start_date < end_date:
-        with st.spinner(f"Fetching data for {ticker} from {start_date} to {end_date}..."):
-            indicators, prediction = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-
-            # Display prediction results
-            st.write("### Indicators:")
-            for key, value in indicators.items():
-                st.write(f"**{key}**: {value:.2f}" if isinstance(value, float) else f"**{key}**: {value}")
-
-            st.write("### Prediction:")
-            st.write(prediction)
+if st.button('Predict'):
+    ticker, last_price, predicted_price, percentage_increase = analyze_stock(ticker_input, start_date, end_date)
+    if predicted_price is not None:
+        st.success(f"{ticker}: Last Price: {last_price:.2f}, Predicted Price: {predicted_price:.2f}, Expected Increase: {percentage_increase:.2f}%")
     else:
-        st.error("Please enter a valid ticker and ensure the end date is after the start date.")
+        st.error("Error in prediction.")
