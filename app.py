@@ -125,7 +125,7 @@ def predict_price():
     predicted_price = scaler.inverse_transform(
         np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
 
-    return data['Close'].iloc[-1].item(), predicted_price[0][0]
+    return predicted_price[0][0]
 
 # Streamlit app
 st.title("Stock Price Prediction with Multiple Indicators")
@@ -146,8 +146,7 @@ if st.button("Run Indicators"):
 
 # Button to predict price
 if st.button("Predict Price"):
-    last_price, predicted_price = predict_price()
-    if last_price is not None and predicted_price is not None:
+    predicted_price = predict_price()
+    if predicted_price is not None:
         st.write("### Prediction")
-        st.write(f"**Last Close Price**: ${last_price:.2f}")
-        st.write(f"**Predicted Price for Next Month**: ${predicted_price:.2f}")
+        st.write(f"**Expected Price for Next Month**: ${predicted_price:.2f}")
