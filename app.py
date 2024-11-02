@@ -3,8 +3,6 @@ import pandas as pd
 import yfinance as yf
 import streamlit as st
 from sklearn.preprocessing import MinMaxScaler
-from keras.models import Sequential
-from keras.layers import LSTM, Dense, Dropout
 
 # Function to compute technical indicators
 def compute_indicators(data):
@@ -52,8 +50,12 @@ def analyze_stock(ticker):
         return ticker, "Not enough data"
 
     # Prepare features based on indicators
-    features = data[['Close', 'SMA_50', 'EMA_50', 'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 
-                     'MACD', 'Signal', '%K', '%D', 'BB_Middle', 'BB_Upper', 'BB_Lower']].iloc[-10:]
+    features = data[['Close', 'SMA_50', 'EMA_50', 'RSI_3', 'RSI_5', 'RSI_10', 
+                     'RSI_14', 'RSI_20', 'MACD', 'Signal', '%K', '%D', 
+                     'BB_Middle', 'BB_Upper', 'BB_Lower']].iloc[-10:]
+
+    # Ensure the feature set has no NaN values
+    features.fillna(0, inplace=True)
 
     # Scale the features
     scaler = MinMaxScaler()
