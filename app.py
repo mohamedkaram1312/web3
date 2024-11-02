@@ -41,12 +41,12 @@ if st.button("Run Prediction"):
         # Compute CMF
         data['CMF'] = (((data['Close'] - data['Low']) - (data['High'] - data['Close'])) /
                        (data['High'] - data['Low']) * data['Volume']).rolling(window=20).mean()
+
+        # Calculate L14 and H14
+        data['L14'] = data['Low'].rolling(window=14, min_periods=1).min()
+        data['H14'] = data['High'].rolling(window=14, min_periods=1).max()
         
-        # Calculate L14 and H14 with backfilled missing values
-        data['L14'] = data['Low'].rolling(window=14, min_periods=1).min().fillna(method='bfill')
-        data['H14'] = data['High'].rolling(window=14, min_periods=1).max().fillna(method='bfill')
-        
-        # Calculate %K with error handling for division by zero
+        # Calculate %K and handle division by zero
         data['%K'] = np.where(
             (data['H14'] - data['L14']) == 0,
             50,  # Assign 50 where division is not possible
