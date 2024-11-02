@@ -1,6 +1,5 @@
 import streamlit as st
 import numpy as np
-import pandas as pd
 import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
@@ -33,8 +32,8 @@ def analyze_stock(ticker, start_date, end_date):
 
     # Train/test split
     split = int(len(X) * 0.8)
-    X_train, X_test = X[:split], y[:split]
-    y_train, y_test = y[:split]
+    X_train, X_test = X[:split], X[split:]
+    y_train, y_test = y[:split], y[split:]
 
     # Build simple LSTM model
     model = Sequential([
@@ -55,7 +54,7 @@ def analyze_stock(ticker, start_date, end_date):
     predicted_price_scaled = model.predict(last_sequence)
     predicted_price = scaler.inverse_transform(predicted_price_scaled)[0][0]
 
-    return data, data['Close'].iloc[-1].item(), predicted_price  # Convert Series to scalar
+    return data['Close'].iloc[-1].item(), predicted_price  # Convert Series to scalar
 
 # Streamlit app
 st.title("Stock Price Prediction")
@@ -68,7 +67,7 @@ end_date = st.date_input("Select End Date", datetime(2024, 1, 1))
 if st.button("Predict"):
     if ticker and start_date < end_date:
         with st.spinner(f"Fetching data for {ticker} from {start_date} to {end_date}..."):
-            data, last_price, predicted_price = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+            last_price, predicted_price = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
             # Display prediction results
             st.write("### Prediction")
