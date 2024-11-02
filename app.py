@@ -85,7 +85,7 @@ def analyze_stock(ticker, start_date, end_date):
     predicted_price_scaled = model.predict(last_sequence)
     predicted_price = scaler.inverse_transform(
         np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
-ONLY THE WAY FOR TECHNIQUE FOR PREDICTIONS AS I NEED THE 2 GIVES ME SAME PREDICTION
+
     return data['Close'].iloc[-1].item(), predicted_price[0][0]
 
 # Streamlit app
