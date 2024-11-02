@@ -57,7 +57,7 @@ def analyze_stock(ticker, start_date, end_date):
                                              '%K', '%D']]) 
 
     # Create sequences for LSTM model 
-    X, y = create_sequences(scaled_data, step=120) 
+    X, y = create_sequences(scaled_data, step=5) 
 
     # Train/test split 
     split = int(len(X) * 0.8) 
