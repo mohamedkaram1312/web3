@@ -5,6 +5,7 @@ from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
 import streamlit as st
+from datetime import datetime
 
 # Function to compute technical indicators
 def compute_indicators(data):
@@ -58,8 +59,8 @@ def create_sequences(data, step):
     return np.array(X), np.array(y)
 
 # Function to analyze a single stock
-def analyze_stock(ticker):
-    data = yf.download(ticker, start="2022-10-24", end="2024-11-01")
+def analyze_stock(ticker, start_date, end_date):
+    data = yf.download(ticker, start=start_date, end=end_date)
     data = compute_indicators(data)
 
     # Drop rows with NaN values
@@ -119,20 +120,25 @@ def analyze_stock(ticker):
     return ticker, last_actual_price, predicted_price, percentage_increase
 
 # Streamlit app
-def main():
-    st.title("Stock Price Prediction with LSTM")
-    ticker = st.text_input("Enter Stock Ticker (e.g., SUGR.CA)", value='SUGR.CA')
+st.title("Stock Price Prediction with Multiple Indicators")
 
-    if st.button("Analyze"):
-        ticker, last_price, predicted_price, percentage_increase = analyze_stock(ticker)
+# User input for ticker and date range
+ticker = st.text_input("Enter Stock Ticker (e.g., AAPL):")
+start_date = st.date_input("Select Start Date", datetime(2022, 10, 24))
+end_date = st.date_input("Select End Date", datetime(2024, 11, 1))
 
-        if predicted_price is not None:
-            st.success(f"{ticker} Analysis Complete!")
-            st.write(f"**Last Price:** {last_price:.2f}")
-            st.write(f"**Predicted Price:** {predicted_price:.2f}")
-            st.write(f"**Expected Increase:** {percentage_increase:.2f}%")
-        else:
-            st.error(f"Not enough data for {ticker}.")
+if st.button("Predict"):
+    if ticker and start_date < end_date:
+        with st.spinner(f"Fetching data for {ticker} from {start_date} to {end_date}..."):
+            result = analyze_stock(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
-if __name__ == "__main__":
-    main()
+            # Display prediction results
+            if result[1] is not None:
+                st.write("### Prediction")
+                st.write(f"**Last Close Price**: ${result[1]:.2f}")
+                st.write(f"**Predicted Price for Next Month**: ${result[2]:.2f}")
+                st.write(f"**Expected Increase**: {result[3]:.2f}%")
+            else:
+                st.error(f"Not enough data available for {ticker}.")
+    else:
+        st.error("Please enter a valid ticker and ensure the end date is after the start date.")
