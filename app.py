@@ -20,6 +20,32 @@ def compute_indicators(data):
         rs = gain / loss
         data[f'RSI_{period}'] = 100 - (100 / (1 + rs))
 
+    # MACD and Signal Line
+    data['EMA_12'] = data['Close'].ewm(span=12, adjust=False).mean()
+    data['EMA_26'] = data['Close'].ewm(span=26, adjust=False).mean()
+    data['MACD'] = data['EMA_12'] - data['EMA_26']
+    data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
+
+    # Volume-Based Indicators
+    data['OBV'] = (np.sign(data['Close'].diff()) * data['Volume']).fillna(0).cumsum()
+    data['CMF'] = (((data['Close'] - data['Low']) - (data['High'] - data['Close'])) / 
+                   (data['High'] - data['Low']) * data['Volume']).rolling(window=20).mean()
+
+    # Stochastic Oscillator
+    data['L14'] = data['Low'].rolling(window=14).min()
+    data['H14'] = data['High'].rolling(window=14).max()
+    data['%K'] = 100 * ((data['Close'] - data['L14']) / (data['H14'] - data['L14']))
+    data['%D'] = data['%K'].rolling(window=3).mean()
+
+    # Bollinger Bands
+    data['BB_Middle'] = data['Close'].rolling(window=20).mean()
+    data['BB_Upper'] = data['BB_Middle'] + (data['Close'].rolling(window=20).std() * 2)
+    data['BB_Lower'] = data['BB_Middle'] - (data['Close'].rolling(window=20).std() * 2)
+
+    # Support and Resistance Levels
+    data['Support'] = data['Low'].rolling(window=20).min()
+    data['Resistance'] = data['High'].rolling(window=20).max()
+
     return data
 
 # Function to create sequences
@@ -44,7 +70,9 @@ def analyze_stock(ticker):
         return ticker, None, None, None
 
     # Prepare features and target
-    features = data[['Close', 'SMA_50', 'EMA_50', 'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20']]
+    features = data[['Close', 'SMA_50', 'EMA_50', 'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 
+                     'MACD', 'Signal', 'OBV', 'CMF', '%K', '%D', 'BB_Middle', 'BB_Upper', 
+                     'BB_Lower', 'Support', 'Resistance']]
     target = data['Close'].shift(-1)  # Predicting the next closing price
 
     # Scale the features and target
@@ -91,7 +119,7 @@ def analyze_stock(ticker):
     return ticker, last_actual_price, predicted_price, percentage_increase
 
 # List of tickers to analyze
-tickers = ['ALUM.CA']  # Add your desired tickers here
+tickers = ['AAPL']  # Replace with your desired tickers
 
 # Initialize the results list
 results = []
@@ -107,4 +135,9 @@ sorted_results = sorted(results, key=lambda x: x[3], reverse=True)
 
 # Print sorted results
 for ticker, last_price, predicted_price, percentage_increase in sorted_results:
+    # Ensure we access the scalar values if they're in Series format
+    last_price = last_price.item() if isinstance(last_price, pd.Series) else last_price
+    predicted_price = predicted_price.item() if isinstance(predicted_price, pd.Series) else predicted_price
+    percentage_increase = percentage_increase.item() if isinstance(percentage_increase, pd.Series) else percentage_increase
+    
     print(f"{ticker}: Last Price: {last_price:.2f}, Predicted Price: {predicted_price:.2f}, Expected Increase: {percentage_increase:.2f}%")
