@@ -24,16 +24,25 @@ def calculate_stochastic_oscillator(data, k_window=14, d_window=3):
     return data
 
 # Function to calculate MACD
-def calculate_macd(data):
-    data['EMA_12'] = data['Close'].ewm(span=12, adjust=False).mean()
-    data['EMA_26'] = data['Close'].ewm(span=26, adjust=False).mean()
-    data['MACD'] = data['EMA_12'] - data['EMA_26']
-    data['Signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
+def calculate_macd(data, short_window=12, long_window=26, signal_window=9):
+    data['EMA_short'] = data['Close'].ewm(span=short_window, adjust=False).mean()
+    data['EMA_long'] = data['Close'].ewm(span=long_window, adjust=False).mean()
+    data['MACD'] = data['EMA_short'] - data['EMA_long']
+    data['MACD_signal'] = data['MACD'].ewm(span=signal_window, adjust=False).mean()
     return data
 
 # Function to calculate OBV
 def calculate_obv(data):
-    data['OBV'] = (np.sign(data['Close'].diff()) * data['Volume']).fillna(0).cumsum()
+    data['Volume'] = data['Volume'].astype(float)
+    obv = [0]  # Initial OBV
+    for i in range(1, len(data)):
+        if data['Close'].iloc[i] > data['Close'].iloc[i - 1]:
+            obv.append(obv[-1] + data['Volume'].iloc[i])
+        elif data['Close'].iloc[i] < data['Close'].iloc[i - 1]:
+            obv.append(obv[-1] - data['Volume'].iloc[i])
+        else:
+            obv.append(obv[-1])
+    data['OBV'] = obv
     return data
 
 # Function to create sequences for LSTM
@@ -49,7 +58,7 @@ def analyze_stock(ticker, start_date, end_date):
     # Load historical data
     data = yf.download(ticker, start=start_date, end=end_date)
     
-    # Calculate moving averages and RSI indicators
+    # Calculate indicators
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
     data['SMA_200'] = data['Close'].rolling(window=200).mean()
     data['EMA_50'] = data['Close'].ewm(span=50, adjust=False).mean()
@@ -60,8 +69,8 @@ def analyze_stock(ticker, start_date, end_date):
     data['RSI_20'] = calculate_rsi(data, 20)
     
     # Calculate Stochastic Oscillator
-    data = calculate_stochastic_oscillator(data)  # Added %K and %D calculation
-    
+    data = calculate_stochastic_oscillator(data)
+
     # Calculate MACD
     data = calculate_macd(data)
 
@@ -71,11 +80,11 @@ def analyze_stock(ticker, start_date, end_date):
     # Drop rows with NaN values (caused by rolling windows)
     data = data.dropna()
 
-    # Prepare data for scaling (Close, SMA_50, SMA_200, EMA_50, RSI_3, RSI_5, RSI_10, RSI_14, RSI_20, %K, %D, MACD, OBV)
+    # Prepare data for scaling
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(data[['Close', 'SMA_50', 'SMA_200', 'EMA_50', 
                                              'RSI_3', 'RSI_5', 'RSI_10', 'RSI_14', 'RSI_20', 
-                                             '%K', '%D', 'MACD', 'OBV']])  # Added MACD and OBV
+                                             '%K', '%D', 'MACD', 'MACD_signal', 'OBV']])  
 
     # Create sequences for LSTM model
     X, y = create_sequences(scaled_data, step=10)
@@ -87,7 +96,7 @@ def analyze_stock(ticker, start_date, end_date):
 
     # Build LSTM model
     model = Sequential([
-        LSTM(64, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),
+        LSTM(64, return_sequences=True, input_shape=(X_train.shape[1], X_train.shape[2])),  
         Dropout(0.2),
         LSTM(50, return_sequences=False),
         Dropout(0.2),
@@ -102,8 +111,11 @@ def analyze_stock(ticker, start_date, end_date):
     last_sequence = scaled_data[-10:]  # Last sequence of all features
     last_sequence = np.reshape(last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1]))  
     predicted_price_scaled = model.predict(last_sequence)
+
+    # Inverse transform the predicted price
     predicted_price = scaler.inverse_transform(
-        np.array([[predicted_price_scaled[0][0], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))  # Only the Close price is extracted
+        np.array([[predicted_price_scaled[0][0]] + [0] * (scaled_data.shape[1] - 1)])
+    )
 
     return data['Close'].iloc[-1].item(), predicted_price[0][0]
 
