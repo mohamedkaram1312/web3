@@ -23,39 +23,42 @@ if st.button("Predict Price"):
     data = yf.download(ticker, start=start_date, end=end_date)
     data = data[['Close', 'High', 'Low', 'Volume']]
 
+    # Ensure Close column is 1D before passing it to the indicators
+    close_data = data['Close'].values.flatten()
+
     # Calculate RSI for different periods and flatten the result
-    data['RSI_3'] = RSIIndicator(data['Close'], window=3).rsi().values.flatten()
-    data['RSI_5'] = RSIIndicator(data['Close'], window=5).rsi().values.flatten()
-    data['RSI_9'] = RSIIndicator(data['Close'], window=9).rsi().values.flatten()
-    data['RSI_14'] = RSIIndicator(data['Close'], window=14).rsi().values.flatten()
-    data['RSI_20'] = RSIIndicator(data['Close'], window=20).rsi().values.flatten()
+    data['RSI_3'] = RSIIndicator(close_data, window=3).rsi()
+    data['RSI_5'] = RSIIndicator(close_data, window=5).rsi()
+    data['RSI_9'] = RSIIndicator(close_data, window=9).rsi()
+    data['RSI_14'] = RSIIndicator(close_data, window=14).rsi()
+    data['RSI_20'] = RSIIndicator(close_data, window=20).rsi()
 
     # Momentum Indicators
-    data['TSI'] = TSIIndicator(data['Close']).tsi().values.flatten()
-    data['WilliamsR'] = WilliamsRIndicator(data['High'], data['Low'], data['Close']).williams_r().values.flatten()
-    data['Stochastic'] = StochasticOscillator(close=data['Close'], high=data['High'], low=data['Low']).stoch().values.flatten()
+    data['TSI'] = TSIIndicator(close_data).tsi()
+    data['WilliamsR'] = WilliamsRIndicator(data['High'], data['Low'], data['Close']).williams_r()
+    data['Stochastic'] = StochasticOscillator(close=data['Close'], high=data['High'], low=data['Low']).stoch()
 
     # Trend Indicators
-    data['SMA_10'] = SMAIndicator(data['Close'], window=10).sma_indicator().values.flatten()
-    data['SMA_50'] = SMAIndicator(data['Close'], window=50).sma_indicator().values.flatten()
-    data['EMA_10'] = EMAIndicator(data['Close'], window=10).ema_indicator().values.flatten()
-    data['EMA_50'] = EMAIndicator(data['Close'], window=50).ema_indicator().values.flatten()
-    data['MACD'] = MACD(data['Close']).macd_diff().values.flatten()  # MACD Difference
-    data['ADX'] = ADXIndicator(data['High'], data['Low'], data['Close'], window=14).adx().values.flatten()
+    data['SMA_10'] = SMAIndicator(data['Close'], window=10).sma_indicator()
+    data['SMA_50'] = SMAIndicator(data['Close'], window=50).sma_indicator()
+    data['EMA_10'] = EMAIndicator(data['Close'], window=10).ema_indicator()
+    data['EMA_50'] = EMAIndicator(data['Close'], window=50).ema_indicator()
+    data['MACD'] = MACD(data['Close']).macd_diff()
+    data['ADX'] = ADXIndicator(data['High'], data['Low'], data['Close'], window=14).adx()
 
     # Volatility Indicators
     bollinger = BollingerBands(close=data['Close'])
-    data['Bollinger_High'] = bollinger.bollinger_hband().values.flatten()  # Upper Bollinger Band
-    data['Bollinger_Low'] = bollinger.bollinger_lband().values.flatten()   # Lower Bollinger Band
-    data['ATR'] = AverageTrueRange(data['High'], data['Low'], data['Close']).average_true_range().values.flatten()
+    data['Bollinger_High'] = bollinger.bollinger_hband()
+    data['Bollinger_Low'] = bollinger.bollinger_lband()
+    data['ATR'] = AverageTrueRange(data['High'], data['Low'], data['Close']).average_true_range()
     keltner = KeltnerChannel(high=data['High'], low=data['Low'], close=data['Close'])
-    data['Keltner_High'] = keltner.keltner_channel_hband().values.flatten()
-    data['Keltner_Low'] = keltner.keltner_channel_lband().values.flatten()
+    data['Keltner_High'] = keltner.keltner_channel_hband()
+    data['Keltner_Low'] = keltner.keltner_channel_lband()
 
     # Volume Indicators
-    data['OBV'] = OnBalanceVolumeIndicator(data['Close'], data['Volume']).on_balance_volume().values.flatten()
+    data['OBV'] = OnBalanceVolumeIndicator(data['Close'], data['Volume']).on_balance_volume()
     vwap = VolumeWeightedAveragePrice(high=data['High'], low=data['Low'], close=data['Close'], volume=data['Volume'])
-    data['VWAP'] = vwap.volume_weighted_average_price().values.flatten()
+    data['VWAP'] = vwap.volume_weighted_average_price()
 
     # Calculate Volatility as Standard Deviation of Closing Prices over 20 days
     data['Volatility'] = data['Close'].rolling(window=20).std()
