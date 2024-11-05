@@ -4,4 +4,4 @@ numpy
 tensorflow
 scikit-learn
 yfinance
-ta-lib
+ta
