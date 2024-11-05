@@ -1,8 +1,7 @@
-numpy
-pandas
-yfinance
-matplotlib
-tensorflow
-keras
 streamlit
+pandas
+numpy
+tensorflow
 scikit-learn
+yfinance
+ta-lib
