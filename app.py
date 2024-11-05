@@ -27,11 +27,13 @@ if st.button("Run Prediction"):
         data = data[['Close', 'High', 'Low', 'Volume']]
 
         # Calculate RSI for different periods
-        data['RSI_3'] = RSIIndicator(data['Close'], window=3).rsi()
-        data['RSI_5'] = RSIIndicator(data['Close'], window=5).rsi()
-        data['RSI_9'] = RSIIndicator(data['Close'], window=9).rsi()
-        data['RSI_14'] = RSIIndicator(data['Close'], window=14).rsi()
-        data['RSI_20'] = RSIIndicator(data['Close'], window=20).rsi()
+# Calculate RSI for different periods and flatten the result
+        data['RSI_3'] = RSIIndicator(data['Close'], window=3).rsi().values.flatten()
+        data['RSI_5'] = RSIIndicator(data['Close'], window=5).rsi().values.flatten()
+        data['RSI_9'] = RSIIndicator(data['Close'], window=9).rsi().values.flatten()
+        data['RSI_14'] = RSIIndicator(data['Close'], window=14).rsi().values.flatten()
+        data['RSI_20'] = RSIIndicator(data['Close'], window=20).rsi().values.flatten()
+
 
         # Momentum Indicators
         data['TSI'] = TSIIndicator(data['Close']).tsi()
